@@ -147,7 +147,7 @@ class _ReporteCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${reporte.colonia} · ${_formatearFecha(reporte.createdAt)}',
+                      '${reporte.colonia.isNotEmpty ? reporte.colonia : 'Colonia no especificada'} · ${_formatearFecha(reporte.createdAt)}',
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
 import 'home_screen.dart';
-import 'mis_reportes_screen.dart';
+import 'feed_comunitario_screen.dart';
 import 'perfil_screen.dart';
 
 class MainScaffold extends ConsumerStatefulWidget {
@@ -17,7 +17,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
 
   final List<Widget> _screens = const [
     HomeScreen(),
-    MisReportesScreen(),
+    FeedComunitarioScreen(),
     PerfilScreen(),
   ];
 
@@ -39,12 +39,12 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
           NavigationDestination(
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map, color: AppColors.primary),
-            label: 'Mapa',
+            label: 'Inicio',
           ),
           NavigationDestination(
-            icon: Icon(Icons.list_alt_outlined),
-            selectedIcon: Icon(Icons.list_alt, color: AppColors.primary),
-            label: 'Mis Reportes',
+            icon: Icon(Icons.forum_outlined),
+            selectedIcon: Icon(Icons.forum, color: AppColors.primary),
+            label: 'Comunidad',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

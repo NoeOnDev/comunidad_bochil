@@ -4,25 +4,32 @@ import 'package:go_router/go_router.dart';
 import '../core/constants.dart';
 import '../models/perfil_usuario.dart';
 import '../providers/providers.dart';
-
-/// Provider que obtiene el perfil del usuario autenticado.
-final perfilProvider = FutureProvider<PerfilUsuario?>((ref) async {
-  return ref.watch(authRepositoryProvider).obtenerPerfil();
-});
+import '../widgets/offline_state_widget.dart';
+import '../providers/connectivity_provider.dart';
 
 class PerfilScreen extends ConsumerWidget {
   const PerfilScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final perfilAsync = ref.watch(perfilProvider);
+    final perfilAsync = ref.watch(perfilUsuarioProvider);
+    final conectado = ref.watch(conectividadProvider).valueOrNull ?? true;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Mi Perfil')),
-      body: perfilAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error al cargar perfil: $e')),
-        data: (perfil) => _PerfilContent(perfil: perfil),
+      body: Column(
+        children: [
+          if (!conectado) const OfflineBanner(),
+          Expanded(
+            child: perfilAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => OfflineStateWidget(
+                onReintentar: () => ref.invalidate(perfilUsuarioProvider),
+              ),
+              data: (perfil) => _PerfilContent(perfil: perfil),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -36,7 +43,8 @@ class _PerfilContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final nombre = perfil?.nombreCompleto ?? 'Usuario';
     final inicial = nombre.isNotEmpty ? nombre[0].toUpperCase() : 'U';
-    final telefono = perfil?.telefono ??
+    final telefono =
+        perfil?.telefono ??
         ref.watch(supabaseClientProvider).auth.currentUser?.phone ??
         'Sin teléfono';
     final colonia = perfil?.colonia ?? 'Sin colonia';
@@ -93,7 +101,8 @@ class _PerfilContent extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Card(
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
+              borderRadius: BorderRadius.circular(16),
+            ),
             elevation: 0,
             color: Colors.white,
             child: Column(
@@ -201,10 +210,7 @@ class _InfoListTile extends StatelessWidget {
       ),
       title: Text(
         title,
-        style: const TextStyle(
-          fontSize: 12,
-          color: AppColors.textSecondary,
-        ),
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
       ),
       subtitle: Text(
         subtitle,

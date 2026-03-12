@@ -1,13 +1,141 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/constants.dart';
+import '../core/cached_tile_layer.dart';
 import '../models/reporte.dart';
+import '../providers/providers.dart';
+import '../widgets/comentarios_bottom_sheet.dart';
 
-class ReporteDetalleScreen extends StatelessWidget {
+class ReporteDetalleScreen extends ConsumerStatefulWidget {
   final Reporte reporte;
 
   const ReporteDetalleScreen({super.key, required this.reporte});
+
+  @override
+  ConsumerState<ReporteDetalleScreen> createState() =>
+      _ReporteDetalleScreenState();
+}
+
+class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
+  late bool _votado;
+  late int _conteoVotos;
+
+  Reporte get reporte => widget.reporte;
+
+  @override
+  void initState() {
+    super.initState();
+    // Inicializar desde datos enriquecidos del feed
+    _votado = reporte.usuarioHaVotado;
+    _conteoVotos = reporte.conteoVotos;
+    // Verificar datos frescos en background
+    _cargarVotos();
+  }
+
+  Future<void> _cargarVotos() async {
+    final repo = ref.read(reportesRepositoryProvider);
+    final yaVoto = await repo.yaVoto(reporte.id);
+    final conteo = await repo.contarVotos(reporte.id);
+    if (mounted) {
+      setState(() {
+        _votado = yaVoto;
+        _conteoVotos = conteo;
+      });
+    }
+  }
+
+  Future<void> _toggleVoto() async {
+    // Actualización optimista
+    setState(() {
+      _votado = !_votado;
+      _conteoVotos += _votado ? 1 : -1;
+    });
+    try {
+      await ref.read(reportesRepositoryProvider).toggleVoto(reporte.id);
+      // Sincronizar con el feed al votar
+      ref.invalidate(todosReportesProvider);
+    } catch (e) {
+      // Revertir en caso de error
+      setState(() {
+        _votado = !_votado;
+        _conteoVotos += _votado ? 1 : -1;
+      });
+      if (mounted) {
+        final esRed = e is SocketException ||
+            e.toString().contains('SocketException') ||
+            e.toString().contains('Failed host lookup');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(esRed
+                ? 'Sin conexión. No se pudo registrar tu voto.'
+                : 'Error al votar: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  bool get _puedeEliminar {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    return reporte.usuarioId == userId &&
+        reporte.estado == EstadoReporte.pendiente;
+  }
+
+  Future<void> _confirmarEliminacion() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar reporte'),
+        content: const Text(
+          '¿Estás seguro de que deseas eliminar este reporte? Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true && mounted) {
+      try {
+        await ref
+            .read(reportesRepositoryProvider)
+            .eliminarReporte(reporte.id);
+        ref.invalidate(reportesProvider);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Reporte eliminado correctamente.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          context.pop();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al eliminar: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
 
   Color _colorEstado(EstadoReporte estado) {
     switch (estado) {
@@ -38,7 +166,17 @@ class ReporteDetalleScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Detalle del Reporte')),
+      appBar: AppBar(
+        title: const Text('Detalle del Reporte'),
+        actions: [
+          if (_puedeEliminar)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              tooltip: 'Eliminar reporte',
+              onPressed: _confirmarEliminacion,
+            ),
+        ],
+      ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,7 +291,9 @@ class ReporteDetalleScreen extends StatelessWidget {
                   _InfoTile(
                     icon: Icons.location_on,
                     label: 'Colonia',
-                    value: reporte.colonia,
+                    value: reporte.colonia.isNotEmpty
+                        ? reporte.colonia
+                        : 'Colonia no especificada',
                   ),
                   const SizedBox(height: 10),
                   _InfoTile(
@@ -161,11 +301,91 @@ class ReporteDetalleScreen extends StatelessWidget {
                     label: 'Fecha de creación',
                     value: _formatearFecha(reporte.createdAt),
                   ),
-                  const SizedBox(height: 10),
-                  _InfoTile(
-                    icon: Icons.thumb_up_alt_outlined,
-                    label: 'Votos de apoyo',
-                    value: reporte.votosApoyo.toString(),
+                  const SizedBox(height: 16),
+
+                  // Botones de acción: Apoyar + Comentar
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: _toggleVoto,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            decoration: BoxDecoration(
+                              color: _votado
+                                  ? AppColors.primary.withValues(alpha: 0.1)
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _votado
+                                    ? AppColors.primary
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  _votado
+                                      ? Icons.thumb_up_alt
+                                      : Icons.thumb_up_off_alt,
+                                  color: _votado
+                                      ? AppColors.primary
+                                      : AppColors.textSecondary,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Apoyar ($_conteoVotos)',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: _votado
+                                        ? AppColors.primary
+                                        : AppColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () =>
+                              mostrarComentarios(context, reporte.id),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: Colors.grey.shade300),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.comment_outlined,
+                                    color: AppColors.textSecondary,
+                                    size: 20),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Comentar',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 20),
 
@@ -194,10 +414,7 @@ class ReporteDetalleScreen extends StatelessWidget {
                                   initialZoom: 16,
                                 ),
                                 children: [
-                                  TileLayer(
-                                    urlTemplate:
-                                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                  ),
+                                  CachedTileLayerBuilder.build(),
                                   MarkerLayer(
                                     markers: [
                                       Marker(

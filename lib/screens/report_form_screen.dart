@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import '../core/constants.dart';
 import '../providers/providers.dart';
+import '../services/cache_service.dart';
+import '../services/local_database_service.dart';
 
 class ReportFormScreen extends ConsumerStatefulWidget {
   final LatLng ubicacion;
@@ -20,31 +22,17 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _tituloController = TextEditingController();
   final _descripcionController = TextEditingController();
-  final _coloniaController = TextEditingController();
   CategoriaReporte _categoriaSeleccionada = CategoriaReporte.fuga;
   final List<File> _fotos = [];
   bool _enviando = false;
+  bool _esPrivado = false;
 
   static const int _maxFotos = 3;
-
-  @override
-  void initState() {
-    super.initState();
-    _cargarColonia();
-  }
-
-  Future<void> _cargarColonia() async {
-    final perfil = await ref.read(authRepositoryProvider).obtenerPerfil();
-    if (perfil != null && perfil.colonia != null && mounted) {
-      _coloniaController.text = perfil.colonia!;
-    }
-  }
 
   @override
   void dispose() {
     _tituloController.dispose();
     _descripcionController.dispose();
-    _coloniaController.dispose();
     super.dispose();
   }
 
@@ -132,37 +120,76 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
     setState(() => _enviando = true);
 
     try {
-      final reportesRepo = ref.read(reportesRepositoryProvider);
-      final List<String> fotosUrls = [];
+      final hayInternet = await _verificarConexion();
 
-      // Subir todas las fotos
-      for (final foto in _fotos) {
-        final url = await reportesRepo.subirFoto(foto);
-        fotosUrls.add(url);
+      if (hayInternet) {
+        // ─── Flujo normal: subir fotos y crear reporte en Supabase ───
+        final reportesRepo = ref.read(reportesRepositoryProvider);
+        final List<String> fotosUrls = [];
+
+        for (final foto in _fotos) {
+          final url = await reportesRepo.subirFoto(foto);
+          fotosUrls.add(url);
+        }
+
+        final perfil = await ref.read(authRepositoryProvider).obtenerPerfil();
+        final colonia = perfil?.colonia ?? 'Sin colonia';
+
+        await reportesRepo.crearReporte(
+          titulo: _tituloController.text.trim(),
+          categoria: _categoriaSeleccionada.value,
+          descripcion: _descripcionController.text.trim(),
+          colonia: colonia,
+          ubicacion: widget.ubicacion,
+          fotosUrls: fotosUrls,
+          esPublico: !_esPrivado,
+        );
+
+        if (!mounted) return;
+
+        ref.invalidate(reportesProvider);
+        ref.invalidate(todosReportesProvider);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('¡Reporte enviado exitosamente!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        // ─── Sin internet: guardar en cola local (sqflite) ───
+        // Intentar obtener colonia del perfil cacheado (SharedPreferences)
+        final perfilCacheado = await CacheService.obtenerPerfilCacheado();
+        final colonia = perfilCacheado?.colonia ?? 'Sin colonia';
+
+        final pendiente = ReportePendiente(
+          titulo: _tituloController.text.trim(),
+          categoria: _categoriaSeleccionada.value,
+          descripcion: _descripcionController.text.trim(),
+          colonia: colonia,
+          latitud: widget.ubicacion.latitude,
+          longitud: widget.ubicacion.longitude,
+          esPublico: !_esPrivado,
+          fotosLocalesPaths: _fotos.map((f) => f.path).join(','),
+        );
+
+        await LocalDatabaseService.insertarPendiente(pendiente);
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Reporte guardado sin conexión. Se enviará automáticamente '
+              'cuando recuperes la señal.',
+            ),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 4),
+          ),
+        );
       }
 
-      // Crear reporte
-      await reportesRepo.crearReporte(
-        titulo: _tituloController.text.trim(),
-        categoria: _categoriaSeleccionada.value,
-        descripcion: _descripcionController.text.trim(),
-        colonia: _coloniaController.text.trim(),
-        ubicacion: widget.ubicacion,
-        fotosUrls: fotosUrls,
-      );
-
-      if (!mounted) return;
-
-      ref.invalidate(reportesProvider);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('¡Reporte enviado exitosamente!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      context.go('/');
+      if (mounted) context.go('/');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -173,6 +200,15 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
       );
     } finally {
       if (mounted) setState(() => _enviando = false);
+    }
+  }
+
+  Future<bool> _verificarConexion() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } on SocketException {
+      return false;
     }
   }
 
@@ -239,18 +275,6 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Colonia
-                      TextFormField(
-                        controller: _coloniaController,
-                        decoration: const InputDecoration(
-                          labelText: 'Colonia',
-                          prefixIcon: Icon(Icons.location_city),
-                        ),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
-                      ),
-                      const SizedBox(height: 16),
-
                       // Descripción
                       TextFormField(
                         controller: _descripcionController,
@@ -263,6 +287,59 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
                         maxLines: 4,
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Switch de privacidad
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _esPrivado ? Icons.lock : Icons.public,
+                              color: _esPrivado
+                                  ? AppColors.primary
+                                  : AppColors.textSecondary,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Reporte Privado',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    _esPrivado
+                                        ? 'Solo visible para el SAPAM'
+                                        : 'Visible en el Feed Comunitario',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: _esPrivado,
+                              onChanged: (v) =>
+                                  setState(() => _esPrivado = v),
+                              activeTrackColor: AppColors.primary,
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 16),
 

@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import '../core/constants.dart';
+import '../core/cached_tile_layer.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key});
@@ -91,11 +92,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     initialZoom: 17.0,
                   ),
                   children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.sapam.comunidad_bochil',
-                    ),
+                    CachedTileLayerBuilder.build(),
                   ],
                 ),
 

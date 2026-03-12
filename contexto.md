@@ -1,88 +1,3 @@
-
-### 📋 PROMPT PARA EL AGENTE DE IA: DESARROLLO FASE 1
-
-**Contexto del Proyecto:**
-Actúa como un desarrollador Senior en Flutter y Supabase. Estamos construyendo una aplicación móvil para la gestión de agua (SAPAM) en el municipio de Bochil, Chiapas.
-La aplicación utilizará **Flutter** para el frontend y **Supabase** (PostgreSQL, Auth, Storage, PostGIS) para el backend.
-Esta es la **Fase 1: Flujo del Ciudadano**, que abarca desde el escaneo de un código QR de invitación, autenticación OTP por SMS, hasta la creación de un reporte georreferenciado con fotografías.
-
-#### 1. Configuración Inicial y Dependencias (`pubspec.yaml`)
-
-Por favor, configura el proyecto instalando las siguientes dependencias clave:
-
-* `supabase_flutter`: Para la conexión con la base de datos, Auth y Storage.
-* `mobile_scanner`: Para leer el código QR físico provisto por el Ayuntamiento.
-* `geolocator`: Para obtener la ubicación actual del usuario mediante el GPS del dispositivo.
-* `flutter_map` y `latlong2`: Para visualizar el mapa usando OpenStreetMap (gratuito, según requerimientos).
-* `image_picker`: Para tomar la foto de la evidencia de la fuga.
-* `flutter_riverpod` (o el gestor de estado de tu preferencia): Para manejar el estado de la aplicación.
-* `go_router`: Para la navegación y protección de rutas (redirección si no está logueado).
-
-#### 2. Estructura de Base de Datos (Contexto para el Agente)
-
-*El backend ya está configurado. Aquí tienes la estructura para generar los Modelos (Data Classes) en Dart:*
-
-* **Tabla `invitaciones_qr**`: `id` (UUID), `numero_contrato` (String), `usado` (Boolean).
-* **Tabla `perfiles_usuarios**`: `id` (UUID - Auth), `rol` (String: 'ciudadano'), `nombre_completo`, `colonia`, `telefono`.
-* **Tabla `reportes**`: `id` (UUID), `usuario_id` (UUID), `titulo`, `categoria` (Enum: Fuga, Sin Agua, etc.), `descripcion`, `ubicacion` (PostGIS Geography POINT), `fotos_urls` (List<String>), `estado` (String).
-
-#### 3. Tarea 1: Flujo de Registro Seguro (QR + OTP)
-
-Implementa el siguiente flujo paso a paso:
-
-1. **Pantalla de Escaneo (`ScannerScreen`):** Usa `mobile_scanner`. Al detectar un UUID en el QR, pausa el escáner y consulta a Supabase: `supabase.from('invitaciones_qr').select().eq('id', qr_uuid).single()`. Valida que `usado == false`.
-2. **Pantalla de Reto de Seguridad:** Solicita al usuario que ingrese su `numero_contrato`. Valida en local que coincida con el dato traído del QR. Si es correcto, avanza.
-3. **Pantalla de Teléfono (`PhoneInputScreen`):** Pide el número de celular. Llama a `supabase.auth.signInWithOtp(phone: numero)`.
-4. **Pantalla de Verificación (`OtpVerifyScreen`):** Pide el código de 6 dígitos. Llama a `supabase.auth.verifyOTP()`.
-5. **Lógica de Consolidación:** Una vez autenticado, ejecuta una transacción (o llamadas secuenciales) para:
-* Insertar los datos del QR en `perfiles_usuarios` usando el `supabase.auth.currentUser!.id`.
-* Actualizar `invitaciones_qr` seteando `usado = true`.
-
-
-
-#### 4. Tarea 2: Pantalla Principal y Mapa de Reportes (`HomeScreen`)
-
-1. Crea un mapa interactivo usando `flutter_map` y OpenStreetMap.
-2. Centra el mapa inicialmente en las coordenadas generales de Bochil, Chiapas (o usando el GPS del dispositivo si tiene permiso).
-3. Consulta la tabla `reportes` y dibuja marcadores (Pins) en el mapa para los reportes existentes. *Nota PostGIS:* Extrae las coordenadas de la columna `ubicacion`.
-4. Agrega un *Floating Action Button* (FAB) grande que diga "Reportar Problema".
-
-#### 5. Tarea 3: Flujo Híbrido de Geolocalización (`LocationPickerScreen`)
-
-Cuando el usuario presiona "Reportar Problema":
-
-1. Usa `geolocator` para obtener la latitud y longitud actual.
-2. Muestra un mapa de pantalla completa centrado en esa ubicación.
-3. **Crucial:** Coloca un ícono de Marcador estático en el *centro exacto de la pantalla* (sobre el mapa, no dentro del mapa).
-4. Permite al usuario arrastrar el mapa. Utiliza el controlador del mapa para obtener la coordenada central (`mapController.camera.center`) al momento de presionar el botón "Confirmar Ubicación".
-
-#### 6. Tarea 4: Formulario de Reporte y Subida de Evidencia (`ReportFormScreen`)
-
-1. Muestra un formulario con:
-* `DropdownButton` para Categoría (Fuga, Sin Agua, Baja Presión, etc.).
-* `TextField` multilinea para la Descripción.
-* Botón "Tomar Foto".
-
-
-2. Usa `image_picker` para abrir la cámara. Muestra una miniatura de la foto tomada.
-3. **Lógica de Subida (Submit):**
-* Paso A: Sube el archivo de imagen al *Storage* de Supabase en el bucket `evidencia_reportes` usando `supabase.storage.from('evidencia_reportes').upload()`. Obtén la URL pública.
-* Paso B: Inserta el registro en la tabla `reportes`.
-* *Atención a la sintaxis PostGIS para el agente:* Para insertar la `ubicacion`, como la base de datos usa PostGIS `geography(POINT, 4326)`, el payload en Dart debe enviarse construyendo el punto así: `'ubicacion': 'POINT(${lon} ${lat})'`.
-
-
-
-#### 7. Reglas de Estilo y Código
-
-* Separa la UI de la lógica de negocio (usa patrón Repository o Notifiers de Riverpod).
-* Maneja los errores con `try-catch` y muestra `SnackBars` amigables al usuario (ej. "Código QR inválido" o "No hay conexión a internet").
-* Usa los colores institucionales (proporciónalos si los tienes, ej. Azul SAPAM).
-
----
-
-> **"A continuación te proporciono el script SQL exacto que ya ejecuté en mi backend de Supabase. Úsalo ÚNICAMENTE como contexto para entender el esquema, los nombres de las tablas, los tipos de datos (Enums) y las relaciones. Basado en esto, genera los Modelos de datos en Dart con sus métodos `fromJson` y `toJson`:"**
->
-
 -- ==============================================================================
 -- 1. EXTENSIONES NECESARIAS
 -- ==============================================================================
@@ -260,3 +175,48 @@ ADD COLUMN latitud FLOAT GENERATED ALWAYS AS (ST_Y(ubicacion::geometry)) STORED;
 
 ALTER TABLE public.reportes 
 ADD COLUMN longitud FLOAT GENERATED ALWAYS AS (ST_X(ubicacion::geometry)) STORED;
+
+-- 1. Agregamos la columna de privacidad a los reportes
+ALTER TABLE public.reportes ADD COLUMN es_publico BOOLEAN DEFAULT true;
+
+-- 2. Creamos la tabla de Votos para evitar votos duplicados
+CREATE TABLE public.votos_reportes (
+    reporte_id UUID REFERENCES public.reportes(id) ON DELETE CASCADE,
+    usuario_id UUID REFERENCES public.perfiles_usuarios(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    PRIMARY KEY (reporte_id, usuario_id) -- Garantiza 1 voto por persona por reporte
+);
+
+-- 3. Activamos seguridad para los votos
+ALTER TABLE public.votos_reportes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Todos ven los votos" ON public.votos_reportes FOR SELECT USING (true);
+CREATE POLICY "Usuarios pueden votar" ON public.votos_reportes FOR INSERT WITH CHECK (auth.uid() = usuario_id);
+CREATE POLICY "Usuarios pueden quitar su voto" ON public.votos_reportes FOR DELETE USING (auth.uid() = usuario_id);
+
+-- 1. Creamos la tabla de comentarios (usamos IF NOT EXISTS para evitar errores)
+CREATE TABLE IF NOT EXISTS public.comentarios_reportes (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    reporte_id UUID REFERENCES public.reportes(id) ON DELETE CASCADE NOT NULL,
+    usuario_id UUID REFERENCES public.perfiles_usuarios(id) ON DELETE CASCADE NOT NULL,
+    comentario TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 2. Aseguramos que el RLS esté activo en los comentarios
+ALTER TABLE public.comentarios_reportes ENABLE ROW LEVEL SECURITY;
+
+-- 3. Limpiamos cualquier política de comentarios previa para evitar duplicados
+DROP POLICY IF EXISTS "Ver comentarios" ON public.comentarios_reportes;
+DROP POLICY IF EXISTS "Crear comentario" ON public.comentarios_reportes;
+
+-- 4. Creamos las políticas correctas para los comentarios
+CREATE POLICY "Ver comentarios" ON public.comentarios_reportes FOR SELECT USING (true);
+CREATE POLICY "Crear comentario" ON public.comentarios_reportes FOR INSERT WITH CHECK ((select auth.uid()) = usuario_id);
+
+-- (Nota: No tocamos la tabla de 'votos_reportes' porque tu base de datos 
+-- ya la tiene creada correctamente junto con sus reglas de seguridad).
+
+CREATE POLICY "Eliminar reporte propio" 
+  ON public.reportes 
+  FOR DELETE 
+  USING (auth.uid() = usuario_id);

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 /// Credenciales de Supabase.
-/// TODO: Reemplaza con tus valores reales desde el dashboard de Supabase.
+/// Reemplaza con tus valores reales desde el dashboard de Supabase.
 const String supabaseUrl = 'https://goeeptzfmaunnlgaldla.supabase.co';
 const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvZWVwdHpmbWF1bm5sZ2FsZGxhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMTI3MzMsImV4cCI6MjA4ODc4ODczM30.75YpSVMm8AMRLWw0x1kpacXKhX0GaGT4Z2pD5hxlXyU';
 
