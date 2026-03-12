@@ -1,0 +1,420 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
+import '../core/constants.dart';
+import '../providers/providers.dart';
+
+class ReportFormScreen extends ConsumerStatefulWidget {
+  final LatLng ubicacion;
+
+  const ReportFormScreen({super.key, required this.ubicacion});
+
+  @override
+  ConsumerState<ReportFormScreen> createState() => _ReportFormScreenState();
+}
+
+class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _tituloController = TextEditingController();
+  final _descripcionController = TextEditingController();
+  final _coloniaController = TextEditingController();
+  CategoriaReporte _categoriaSeleccionada = CategoriaReporte.fuga;
+  final List<File> _fotos = [];
+  bool _enviando = false;
+
+  static const int _maxFotos = 3;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarColonia();
+  }
+
+  Future<void> _cargarColonia() async {
+    final perfil = await ref.read(authRepositoryProvider).obtenerPerfil();
+    if (perfil != null && perfil.colonia != null && mounted) {
+      _coloniaController.text = perfil.colonia!;
+    }
+  }
+
+  @override
+  void dispose() {
+    _tituloController.dispose();
+    _descripcionController.dispose();
+    _coloniaController.dispose();
+    super.dispose();
+  }
+
+  void _mostrarOpcionesFoto() {
+    if (_fotos.length >= _maxFotos) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Máximo $_maxFotos fotos permitidas')),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Agregar Foto',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.primary,
+                  child: Icon(Icons.camera_alt, color: Colors.white),
+                ),
+                title: const Text('Tomar Foto'),
+                subtitle: const Text('Usar la cámara del dispositivo'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _seleccionarFoto(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppColors.accent,
+                  child: Icon(Icons.photo_library, color: Colors.grey.shade800),
+                ),
+                title: const Text('Elegir de la Galería'),
+                subtitle: const Text('Seleccionar una imagen existente'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _seleccionarFoto(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _seleccionarFoto(ImageSource source) async {
+    final picker = ImagePicker();
+    final xFile = await picker.pickImage(
+      source: source,
+      maxWidth: 1280,
+      maxHeight: 1280,
+      imageQuality: 80,
+    );
+
+    if (xFile != null && mounted) {
+      setState(() => _fotos.add(File(xFile.path)));
+    }
+  }
+
+  Future<void> _enviarReporte() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _enviando = true);
+
+    try {
+      final reportesRepo = ref.read(reportesRepositoryProvider);
+      final List<String> fotosUrls = [];
+
+      // Subir todas las fotos
+      for (final foto in _fotos) {
+        final url = await reportesRepo.subirFoto(foto);
+        fotosUrls.add(url);
+      }
+
+      // Crear reporte
+      await reportesRepo.crearReporte(
+        titulo: _tituloController.text.trim(),
+        categoria: _categoriaSeleccionada.value,
+        descripcion: _descripcionController.text.trim(),
+        colonia: _coloniaController.text.trim(),
+        ubicacion: widget.ubicacion,
+        fotosUrls: fotosUrls,
+      );
+
+      if (!mounted) return;
+
+      ref.invalidate(reportesProvider);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('¡Reporte enviado exitosamente!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      context.go('/');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al enviar el reporte: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _enviando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Nuevo Reporte')),
+      body: SafeArea(
+        child: _enviando
+            ? const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 20),
+                    Text(
+                      'Subiendo fotos y creando reporte...',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Categoría
+                      DropdownButtonFormField<CategoriaReporte>(
+                        initialValue: _categoriaSeleccionada,
+                        decoration: const InputDecoration(
+                          labelText: 'Categoría del problema',
+                          prefixIcon: Icon(Icons.category),
+                        ),
+                        items: CategoriaReporte.values.map((cat) {
+                          return DropdownMenuItem(
+                            value: cat,
+                            child: Text(cat.value),
+                          );
+                        }).toList(),
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() => _categoriaSeleccionada = v);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Título
+                      TextFormField(
+                        controller: _tituloController,
+                        decoration: const InputDecoration(
+                          labelText: 'Título del reporte',
+                          prefixIcon: Icon(Icons.title),
+                          hintText: 'Ej: Fuga en la calle principal',
+                        ),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Colonia
+                      TextFormField(
+                        controller: _coloniaController,
+                        decoration: const InputDecoration(
+                          labelText: 'Colonia',
+                          prefixIcon: Icon(Icons.location_city),
+                        ),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Descripción
+                      TextFormField(
+                        controller: _descripcionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Descripción',
+                          prefixIcon: Icon(Icons.description),
+                          hintText: 'Describe el problema con detalle...',
+                          alignLabelWithHint: true,
+                        ),
+                        maxLines: 4,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Coordenadas (solo lectura)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.gps_fixed,
+                                color: AppColors.primary, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Lat: ${widget.ubicacion.latitude.toStringAsFixed(6)}, '
+                                'Lon: ${widget.ubicacion.longitude.toStringAsFixed(6)}',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Sección de fotos
+                      Row(
+                        children: [
+                          const Icon(Icons.photo_camera_outlined,
+                              size: 20, color: AppColors.textSecondary),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Evidencia fotográfica (${_fotos.length}/$_maxFotos)',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Grid de miniaturas + botón agregar
+                      SizedBox(
+                        height: 110,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            ..._fotos.asMap().entries.map((entry) {
+                              return _FotoMiniatura(
+                                foto: entry.value,
+                                onRemove: () {
+                                  setState(() => _fotos.removeAt(entry.key));
+                                },
+                              );
+                            }),
+                            if (_fotos.length < _maxFotos)
+                              _BotonAgregarFoto(onTap: _mostrarOpcionesFoto),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Botón enviar
+                      ElevatedButton.icon(
+                        onPressed: _enviarReporte,
+                        icon: const Icon(Icons.send),
+                        label: const Text('Enviar Reporte'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _FotoMiniatura extends StatelessWidget {
+  final File foto;
+  final VoidCallback onRemove;
+
+  const _FotoMiniatura({required this.foto, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 10),
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(
+              foto,
+              width: 100,
+              height: 100,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned(
+            top: 4,
+            right: 4,
+            child: GestureDetector(
+              onTap: onRemove,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                padding: const EdgeInsets.all(4),
+                child: const Icon(Icons.close, size: 16, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BotonAgregarFoto extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _BotonAgregarFoto({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 100,
+        height: 100,
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.primary, width: 1.5),
+          borderRadius: BorderRadius.circular(12),
+          color: AppColors.primary.withValues(alpha: 0.05),
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_a_photo, color: AppColors.primary, size: 28),
+            SizedBox(height: 4),
+            Text(
+              'Agregar',
+              style: TextStyle(fontSize: 12, color: AppColors.primary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
