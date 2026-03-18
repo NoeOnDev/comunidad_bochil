@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,18 +27,76 @@ class _FeedComunitarioScreenState extends ConsumerState<FeedComunitarioScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   List<ReportePendiente> _pendientes = [];
+  StreamSubscription<List<Map<String, dynamic>>>? _alertasSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _reportesSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _historialSub;
+  Timer? _alertasDebounce;
+  Timer? _reportesDebounce;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _cargarPendientes();
+    _iniciarRealtime();
   }
 
   @override
   void dispose() {
+    _alertasSub?.cancel();
+    _reportesSub?.cancel();
+    _historialSub?.cancel();
+    _alertasDebounce?.cancel();
+    _reportesDebounce?.cancel();
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _programarRefrescoAlertas() {
+    _alertasDebounce?.cancel();
+    _alertasDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (!mounted) return;
+      ref.invalidate(alertasProvider);
+    });
+  }
+
+  void _programarRefrescoReportes({required bool recargarPendientes}) {
+    _reportesDebounce?.cancel();
+    _reportesDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (!mounted) return;
+      ref.invalidate(todosReportesProvider);
+      if (recargarPendientes) {
+        _cargarPendientes();
+      }
+    });
+  }
+
+  void _iniciarRealtime() {
+    final client = ref.read(supabaseClientProvider);
+
+    _alertasSub = client
+        .from('alertas_oficiales')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+          if (!mounted) return;
+          _programarRefrescoAlertas();
+        });
+
+    _reportesSub = client
+        .from('reportes')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+          if (!mounted) return;
+          _programarRefrescoReportes(recargarPendientes: true);
+        });
+
+    _historialSub = client
+        .from('historial_estados')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+          if (!mounted) return;
+          _programarRefrescoReportes(recargarPendientes: false);
+        });
   }
 
   Future<void> _cargarPendientes() async {

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -25,6 +26,14 @@ class ReporteDetalleScreen extends ConsumerStatefulWidget {
 class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
   late bool _votado;
   late int _conteoVotos;
+  late EstadoReporte _estadoActual;
+  late DateTime _updatedAtActual;
+  StreamSubscription<List<Map<String, dynamic>>>? _votosSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _historialSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _reporteSub;
+  Timer? _votosDebounce;
+  Timer? _historialDebounce;
+  Timer? _reporteDebounce;
 
   Reporte get reporte => widget.reporte;
 
@@ -34,8 +43,101 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
     // Inicializar desde datos enriquecidos del feed
     _votado = reporte.usuarioHaVotado;
     _conteoVotos = reporte.conteoVotos;
+    _estadoActual = reporte.estado;
+    _updatedAtActual = reporte.updatedAt;
     // Verificar datos frescos en background
     _cargarVotos();
+    _iniciarRealtime();
+  }
+
+  @override
+  void dispose() {
+    _votosSub?.cancel();
+    _historialSub?.cancel();
+    _reporteSub?.cancel();
+    _votosDebounce?.cancel();
+    _historialDebounce?.cancel();
+    _reporteDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _programarRefrescoVotos() {
+    _votosDebounce?.cancel();
+    _votosDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      _cargarVotos();
+      ref.invalidate(todosReportesProvider);
+    });
+  }
+
+  void _programarRefrescoHistorial() {
+    _historialDebounce?.cancel();
+    _historialDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (!mounted) return;
+      ref.invalidate(historialEstadosProvider(reporte.id));
+    });
+  }
+
+  void _programarRefrescoReporte(Map<String, dynamic> row) {
+    _reporteDebounce?.cancel();
+    _reporteDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (!mounted) return;
+
+      final estadoRaw = (row['estado'] as String?)?.trim();
+      final updatedAtRaw = row['updated_at'] as String?;
+
+      final nuevoEstado = EstadoReporte.values.firstWhere(
+        (e) => e.value == estadoRaw,
+        orElse: () => _estadoActual,
+      );
+      final nuevoUpdatedAt = updatedAtRaw != null
+          ? DateTime.tryParse(updatedAtRaw) ?? _updatedAtActual
+          : _updatedAtActual;
+
+      final cambioEstado = nuevoEstado != _estadoActual;
+      final cambioTiempo = nuevoUpdatedAt != _updatedAtActual;
+      if (cambioEstado || cambioTiempo) {
+        setState(() {
+          _estadoActual = nuevoEstado;
+          _updatedAtActual = nuevoUpdatedAt;
+        });
+      }
+
+      ref.invalidate(todosReportesProvider);
+      ref.invalidate(reporteDetallePorIdProvider(reporte.id));
+    });
+  }
+
+  void _iniciarRealtime() {
+    final client = ref.read(supabaseClientProvider);
+
+    _votosSub = client
+        .from('votos_reportes')
+        .stream(primaryKey: ['reporte_id', 'usuario_id'])
+        .eq('reporte_id', reporte.id)
+        .listen((_) {
+          if (!mounted) return;
+          _programarRefrescoVotos();
+        });
+
+    _historialSub = client
+        .from('historial_estados')
+        .stream(primaryKey: ['id'])
+        .eq('reporte_id', reporte.id)
+        .order('created_at', ascending: true)
+        .listen((_) {
+          if (!mounted) return;
+          _programarRefrescoHistorial();
+        });
+
+    _reporteSub = client
+        .from('reportes')
+        .stream(primaryKey: ['id'])
+        .eq('id', reporte.id)
+        .listen((rows) {
+          if (!mounted || rows.isEmpty) return;
+          _programarRefrescoReporte(rows.first);
+        });
   }
 
   Future<void> _cargarVotos() async {
@@ -85,7 +187,7 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
   bool get _puedeEliminar {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     return reporte.usuarioId == userId &&
-        reporte.estado == EstadoReporte.pendiente;
+      _estadoActual == EstadoReporte.pendiente;
   }
 
   Future<void> _confirmarEliminacion() async {
@@ -231,23 +333,23 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: _colorEstado(reporte.estado)
+                          color: _colorEstado(_estadoActual)
                               .withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(_iconEstado(reporte.estado),
+                            Icon(_iconEstado(_estadoActual),
                                 size: 14,
-                                color: _colorEstado(reporte.estado)),
+                                color: _colorEstado(_estadoActual)),
                             const SizedBox(width: 4),
                             Text(
-                              reporte.estado.value,
+                              _estadoActual.value,
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: _colorEstado(reporte.estado),
+                                color: _colorEstado(_estadoActual),
                               ),
                             ),
                           ],
@@ -305,12 +407,12 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
                   const SizedBox(height: 10),
                   _InfoTile(
                     icon: Icons.hourglass_bottom,
-                    label: reporte.estado == EstadoReporte.resuelto
+                    label: _estadoActual == EstadoReporte.resuelto
                         ? 'Tiempo de resolución'
                         : 'Tiempo transcurrido',
                     value: _formatearDuracion(
-                      reporte.estado == EstadoReporte.resuelto
-                          ? reporte.updatedAt.difference(reporte.createdAt)
+                      _estadoActual == EstadoReporte.resuelto
+                          ? _updatedAtActual.difference(reporte.createdAt)
                           : DateTime.now().difference(reporte.createdAt),
                     ),
                   ),
@@ -336,7 +438,7 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
                   TimelineEstadosWidget(
                     reporteId: reporte.id,
                     fechaCreacion: reporte.createdAt,
-                    estadoActual: reporte.estado,
+                    estadoActual: _estadoActual,
                   ),
                   const SizedBox(height: 16),
 

@@ -353,6 +353,26 @@ EXECUTE FUNCTION public.update_modified_column();
 COMMIT;
 
 -- ============================================================================
+-- SAPAM Bochil - Vista pública de perfiles (nombres visibles en comunidad)
+-- Incluye:
+-- 1) VIEW perfiles_publicos (id + nombre_completo)
+-- 2) GRANT SELECT a authenticated/anon
+-- ============================================================================
+
+BEGIN;
+
+CREATE OR REPLACE VIEW public.perfiles_publicos AS
+SELECT
+  id,
+  nombre_completo
+FROM public.perfiles_usuarios;
+
+GRANT SELECT ON public.perfiles_publicos TO authenticated;
+GRANT SELECT ON public.perfiles_publicos TO anon;
+
+COMMIT;
+
+-- ============================================================================
 -- SAPAM Bochil - Migracion Step 5 (Foro Comunitario Ampliado)
 -- Incluye:
 -- 1) Enum categoria_tema

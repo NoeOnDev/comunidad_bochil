@@ -144,7 +144,9 @@ Hay 2 caminos de acceso:
   - SELECT de reportes enriquecidos (incluye join con autor).
   - Filtro local por es_publico y por usuario actual.
 - perfiles_usuarios
-  - JOIN para nombre del autor (nombre_completo).
+  - SELECT para perfil propio.
+- perfiles_publicos
+  - SELECT para nombre del autor (nombre_completo).
 - votos_reportes
   - SELECT para conteos y voto del usuario.
   - INSERT/DELETE para toggle de voto.
@@ -208,7 +210,9 @@ Hay 2 caminos de acceso:
   - SELECT para conteo y voto del usuario.
   - INSERT/DELETE para toggle de voto.
 - perfiles_usuarios
-  - JOIN para nombre de autor en temas y comentarios.
+  - SELECT para datos propios.
+- perfiles_publicos
+  - SELECT para nombre de autor en temas y comentarios.
 
 ## 2.7 Comentarios (Reportes)
 
@@ -224,7 +228,9 @@ Hay 2 caminos de acceso:
   - SELECT de comentarios por reporte.
   - INSERT de nuevo comentario.
 - perfiles_usuarios
-  - JOIN para nombre del autor en cada comentario.
+  - SELECT para datos propios.
+- perfiles_publicos
+  - SELECT para nombre del autor en cada comentario.
 
 ## 2.8 Perfil
 
@@ -333,20 +339,20 @@ Hay 2 caminos de acceso:
 | Crear reporte | reportes | INSERT |
 | Crear reporte | storage.objects (evidencia_reportes) | INSERT (upload), URL publica |
 | Feed comunitario | reportes | SELECT |
-| Feed comunitario | perfiles_usuarios | JOIN para autor |
+| Feed comunitario | perfiles_publicos | SELECT para autor |
 | Feed comunitario | votos_reportes | SELECT, INSERT, DELETE |
 | Feed comunitario | comentarios_reportes | SELECT |
 | Feed comunitario | alertas_oficiales | SELECT (banner compacto) |
 | Feed comunitario | historial_estados | SELECT (estado/timeline en detalle) |
 | Comentarios | comentarios_reportes | SELECT, INSERT |
-| Comentarios | perfiles_usuarios | JOIN para autor |
+| Comentarios | perfiles_publicos | SELECT para autor |
 | Detalle reporte | reportes | DELETE (propio en Pendiente) |
 | Detalle reporte | votos_reportes | SELECT, INSERT, DELETE |
 | Detalle reporte | historial_estados | SELECT |
 | Foro comunitario | temas_foro | SELECT, INSERT, UPDATE, DELETE |
 | Foro comunitario | comentarios_foro | SELECT, INSERT, DELETE |
 | Foro comunitario | votos_foro | SELECT, INSERT, DELETE |
-| Foro comunitario | perfiles_usuarios | JOIN para autor |
+| Foro comunitario | perfiles_publicos | SELECT para autor |
 | Centro de notificaciones | alertas_oficiales | SELECT |
 | Centro de notificaciones | historial_estados | SELECT |
 | Centro de notificaciones | reportes | SELECT |
@@ -438,9 +444,20 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
 - Uso en app:
   - Creacion de perfil en alta inicial (registro QR + OTP).
   - Consulta de perfil para pantalla de Perfil.
-  - JOIN para nombre del autor en feed y comentarios.
+  - Datos de usuario autenticado y trazabilidad interna.
 
-### 7.3 public.reportes
+### 7.3 public.perfiles_publicos (VIEW)
+
+- Estado: Implementada para consumo publico seguro.
+- Campos clave usados por app:
+  - id
+  - nombre_completo
+- Seguridad relevante:
+  - Solo expone nombre publico, sin datos sensibles.
+- Uso en app:
+  - Mostrar nombre de autor en feed, comentarios y foro.
+
+### 7.4 public.reportes
 
 - Estado: Implementada y en uso intensivo.
 - Campos clave usados por app:
@@ -469,7 +486,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
   - Creacion de reportes (online y sincronizacion offline).
   - Eliminacion de reporte propio en estado Pendiente (regla de UI).
 
-### 7.4 public.votos_reportes
+### 7.5 public.votos_reportes
 
 - Estado: Implementada y en uso.
 - Campos clave usados por app:
@@ -485,7 +502,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
   - Verificacion de voto activo del usuario.
   - Toggle votar/quitar voto.
 
-### 7.5 public.comentarios_reportes
+### 7.6 public.comentarios_reportes
 
 - Estado: Implementada y en uso.
 - Campos clave usados por app:
@@ -502,7 +519,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
   - Alta de comentarios desde bottom sheet.
   - Conteo de comentarios en feed.
 
-### 7.6 public.alertas_oficiales
+### 7.7 public.alertas_oficiales
 
 - Estado: Implementada y en uso.
 - Campos clave usados por app:
@@ -518,7 +535,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
   - Banner compacto de alertas oficiales en modulo Comunidad.
   - Fuente del centro de notificaciones.
 
-### 7.7 public.historial_estados
+### 7.8 public.historial_estados
 
 - Estado: Implementada y en uso.
 - Campos clave usados por app:
@@ -535,7 +552,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
   - Timeline de estados en detalle de reporte.
   - Fuente del centro de notificaciones para cambios de estado.
 
-### 7.8 public.device_tokens
+### 7.9 public.device_tokens
 
 - Estado: Implementada y en uso.
 - Campos clave usados por app:
@@ -551,7 +568,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
   - Registro y mantenimiento de tokens FCM del usuario autenticado.
   - Limpieza de token al cerrar sesion.
 
-### 7.9 public.temas_foro
+### 7.10 public.temas_foro
 
 - Estado: Implementada y en uso.
 - Campos clave usados por app:
@@ -571,7 +588,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
   - Feed del foro por categoria.
   - Creacion y gestion de temas comunitarios.
 
-### 7.10 public.comentarios_foro
+### 7.11 public.comentarios_foro
 
 - Estado: Implementada y en uso.
 - Campos clave usados por app:
@@ -587,7 +604,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
 - Uso en app:
   - Conversacion dentro del detalle de tema de foro.
 
-### 7.11 public.votos_foro
+### 7.12 public.votos_foro
 
 - Estado: Implementada y en uso.
 - Campos clave usados por app:
@@ -600,7 +617,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
 - Uso en app:
   - Reaccion de apoyo en temas de foro.
 
-### 7.12 public.notificaciones_lecturas
+### 7.13 public.notificaciones_lecturas
 
 - Estado: Implementada y en uso.
 - Campos clave usados por app:
@@ -614,7 +631,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
 - Uso en app:
   - Persistir estado leida/no leida del centro de notificaciones.
 
-### 7.13 storage.objects (bucket evidencia_reportes)
+### 7.14 storage.objects (bucket evidencia_reportes)
 
 - Estado: Implementada y en uso.
 - Configuracion relevante:
@@ -626,7 +643,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
   - Carga de evidencia fotografica al crear reporte.
   - Lectura de URL publica en cards/detalle.
 
-### 7.14 auth.users (Supabase Auth)
+### 7.15 auth.users (Supabase Auth)
 
 - Estado: Implementada y en uso.
 - Operaciones usadas por app:

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 import '../core/constants.dart';
 import '../models/notificacion_app.dart';
 import '../providers/providers.dart';
@@ -17,6 +19,65 @@ class NotificacionesScreen extends ConsumerStatefulWidget {
 
 class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
   FiltroNotificaciones _filtro = FiltroNotificaciones.todas;
+  StreamSubscription<List<Map<String, dynamic>>>? _alertasSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _historialSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _lecturasSub;
+  Timer? _notificacionesDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _iniciarRealtime();
+  }
+
+  @override
+  void dispose() {
+    _alertasSub?.cancel();
+    _historialSub?.cancel();
+    _lecturasSub?.cancel();
+    _notificacionesDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _programarRefrescoNotificaciones() {
+    _notificacionesDebounce?.cancel();
+    _notificacionesDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (!mounted) return;
+      ref.invalidate(notificacionesProvider);
+    });
+  }
+
+  void _iniciarRealtime() {
+    final client = ref.read(supabaseClientProvider);
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+
+    _alertasSub = client
+        .from('alertas_oficiales')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+          if (!mounted) return;
+          _programarRefrescoNotificaciones();
+        });
+
+    _historialSub = client
+        .from('historial_estados')
+        .stream(primaryKey: ['id'])
+        .listen((_) {
+          if (!mounted) return;
+          _programarRefrescoNotificaciones();
+        });
+
+    if (userId != null) {
+      _lecturasSub = client
+          .from('notificaciones_lecturas')
+          .stream(primaryKey: ['id'])
+          .eq('usuario_id', userId)
+          .listen((_) {
+            if (!mounted) return;
+            _programarRefrescoNotificaciones();
+          });
+    }
+  }
 
   String _tiempoRelativo(DateTime fecha) {
     final d = DateTime.now().difference(fecha);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 import '../core/constants.dart';
 import '../models/tema_foro.dart';
 import '../providers/providers.dart';
@@ -19,6 +20,10 @@ class _TemaDetalleScreenState extends ConsumerState<TemaDetalleScreen> {
   late int _conteoVotos;
   final _comentarioController = TextEditingController();
   bool _enviandoComentario = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _comentariosSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _votosSub;
+  Timer? _comentariosDebounce;
+  Timer? _votosDebounce;
 
   TemaForo get tema => widget.tema;
 
@@ -27,12 +32,69 @@ class _TemaDetalleScreenState extends ConsumerState<TemaDetalleScreen> {
     super.initState();
     _votado = tema.usuarioHaVotado;
     _conteoVotos = tema.conteoVotos;
+    _iniciarRealtime();
   }
 
   @override
   void dispose() {
+    _comentariosSub?.cancel();
+    _votosSub?.cancel();
+    _comentariosDebounce?.cancel();
+    _votosDebounce?.cancel();
     _comentarioController.dispose();
     super.dispose();
+  }
+
+  void _programarRefrescoComentarios() {
+    _comentariosDebounce?.cancel();
+    _comentariosDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (!mounted) return;
+      ref.invalidate(comentariosTemaProvider(tema.id));
+      ref.invalidate(temasForoProvider);
+    });
+  }
+
+  void _programarRefrescoVotos() {
+    _votosDebounce?.cancel();
+    _votosDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      _cargarVotosTema();
+      ref.invalidate(temasForoProvider);
+    });
+  }
+
+  void _iniciarRealtime() {
+    final client = ref.read(supabaseClientProvider);
+
+    _comentariosSub = client
+        .from('comentarios_foro')
+        .stream(primaryKey: ['id'])
+        .eq('tema_id', tema.id)
+        .order('created_at', ascending: true)
+        .listen((_) {
+          if (!mounted) return;
+          _programarRefrescoComentarios();
+        });
+
+    _votosSub = client
+        .from('votos_foro')
+        .stream(primaryKey: ['tema_id', 'usuario_id'])
+        .eq('tema_id', tema.id)
+        .listen((_) {
+          if (!mounted) return;
+          _programarRefrescoVotos();
+        });
+  }
+
+  Future<void> _cargarVotosTema() async {
+    final repo = ref.read(foroRepositoryProvider);
+    final yaVoto = await repo.yaVotoTema(tema.id);
+    final conteo = await repo.contarVotosTema(tema.id);
+    if (!mounted) return;
+    setState(() {
+      _votado = yaVoto;
+      _conteoVotos = conteo;
+    });
   }
 
   bool get _puedeEliminar {

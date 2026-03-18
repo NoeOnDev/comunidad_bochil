@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
@@ -28,17 +29,44 @@ class _ComentariosSheetState extends ConsumerState<_ComentariosSheet> {
   List<Map<String, dynamic>> _comentarios = [];
   bool _cargando = true;
   bool _enviando = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _comentariosRealtimeSub;
+  Timer? _refreshDebounce;
 
   @override
   void initState() {
     super.initState();
     _cargarComentarios();
+    _iniciarRealtimeComentarios();
   }
 
   @override
   void dispose() {
+    _comentariosRealtimeSub?.cancel();
+    _refreshDebounce?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _programarRefrescoComentarios() {
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (!mounted) return;
+      _cargarComentarios();
+      ref.invalidate(todosReportesProvider);
+    });
+  }
+
+  void _iniciarRealtimeComentarios() {
+    final client = ref.read(supabaseClientProvider);
+    _comentariosRealtimeSub = client
+        .from('comentarios_reportes')
+        .stream(primaryKey: ['id'])
+        .eq('reporte_id', widget.reporteId)
+        .order('created_at', ascending: true)
+        .listen((_) {
+          if (!mounted) return;
+          _programarRefrescoComentarios();
+        });
   }
 
   Future<void> _cargarComentarios() async {

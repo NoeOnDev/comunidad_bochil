@@ -14,6 +14,27 @@ class ReportesRepository {
       'colonia, latitud, longitud, fotos_urls, estado, es_publico, votos_apoyo, '
       'created_at, updated_at';
 
+  Future<Map<String, String>> _obtenerNombresPublicos(
+      List<String> usuariosIds) async {
+    final idsUnicos = usuariosIds.toSet().toList();
+    if (idsUnicos.isEmpty) return {};
+
+    final data = await _client
+        .from('perfiles_publicos')
+        .select('id, nombre_completo')
+        .inFilter('id', idsUnicos);
+
+    final mapa = <String, String>{};
+    for (final row in data as List) {
+      final id = row['id'] as String?;
+      final nombre = row['nombre_completo'] as String?;
+      if (id != null && nombre != null && nombre.trim().isNotEmpty) {
+        mapa[id] = nombre;
+      }
+    }
+    return mapa;
+  }
+
   /// Obtiene todos los reportes para mostrar en el mapa.
   Future<List<Reporte>> obtenerReportes() async {
     final response = await _client
@@ -31,10 +52,10 @@ class ReportesRepository {
   Future<List<Reporte>> obtenerReportesPublicos() async {
     final userId = _client.auth.currentUser?.id;
 
-    // 1. Reportes públicos con nombre del autor
+    // 1. Reportes públicos
     final reportesData = await _client
         .from('reportes')
-        .select('$_selectColumns, autor:perfiles_usuarios!usuario_id(nombre_completo)')
+      .select(_selectColumns)
         .eq('es_publico', true)
         .order('created_at', ascending: false);
 
@@ -42,6 +63,9 @@ class ReportesRepository {
     if (lista.isEmpty) return [];
 
     final ids = lista.map((r) => r['id'] as String).toList();
+
+    final autorIds = lista.map((r) => r['usuario_id'] as String).toList();
+    final nombresAutores = await _obtenerNombresPublicos(autorIds);
 
     // 2. Todos los votos de estos reportes (una sola consulta)
     final votosData = await _client
@@ -73,9 +97,8 @@ class ReportesRepository {
     return lista.map((raw) {
       final json = Map<String, dynamic>.from(raw as Map);
       final id = json['id'] as String;
-      final autorData = json.remove('autor');
-      json['nombre_autor'] =
-          autorData is Map ? autorData['nombre_completo'] : null;
+        final autorId = json['usuario_id'] as String;
+        json['nombre_autor'] = nombresAutores[autorId];
       json['conteo_votos'] = conteoVotos[id] ?? 0;
       json['usuario_ha_votado'] = misVotos.contains(id);
       json['conteo_comentarios'] = conteoComentarios[id] ?? 0;
@@ -184,11 +207,27 @@ class ReportesRepository {
       String reporteId) async {
     final data = await _client
         .from('comentarios_reportes')
-        .select(
-            'id, comentario, created_at, usuario_id, autor:perfiles_usuarios!usuario_id(nombre_completo)')
+        .select('id, comentario, created_at, usuario_id')
         .eq('reporte_id', reporteId)
         .order('created_at', ascending: true);
-    return (data as List).cast<Map<String, dynamic>>();
+
+    final comentarios = (data as List).cast<Map<String, dynamic>>();
+    final autorIds = comentarios
+        .map((c) => c['usuario_id'] as String?)
+        .whereType<String>()
+        .toList();
+    final nombresAutores = await _obtenerNombresPublicos(autorIds);
+
+    return comentarios.map((c) {
+      final autorId = c['usuario_id'] as String?;
+      return {
+        ...c,
+        'autor': {
+          'nombre_completo':
+              autorId != null ? (nombresAutores[autorId] ?? 'Usuario') : 'Usuario',
+        },
+      };
+    }).toList();
   }
 
   /// Agrega un comentario a un reporte.
@@ -233,9 +272,7 @@ class ReportesRepository {
 
     final raw = await _client
         .from('reportes')
-        .select(
-          '$_selectColumns, autor:perfiles_usuarios!usuario_id(nombre_completo)',
-        )
+        .select(_selectColumns)
         .eq('id', reporteId)
         .maybeSingle();
 
@@ -257,9 +294,11 @@ class ReportesRepository {
     final conteoComentarios = (comentariosData as List).length;
 
     final json = Map<String, dynamic>.from(raw as Map);
-    final autorData = json.remove('autor');
-    json['nombre_autor'] =
-        autorData is Map ? autorData['nombre_completo'] : null;
+    final autorId = json['usuario_id'] as String?;
+    if (autorId != null) {
+      final nombres = await _obtenerNombresPublicos([autorId]);
+      json['nombre_autor'] = nombres[autorId];
+    }
     json['conteo_votos'] = conteoVotos;
     json['usuario_ha_votado'] = usuarioHaVotado;
     json['conteo_comentarios'] = conteoComentarios;
@@ -276,14 +315,15 @@ class ReportesRepository {
 
     final reportesData = await _client
         .from('reportes')
-        .select(
-            '$_selectColumns, autor:perfiles_usuarios!usuario_id(nombre_completo)')
+      .select(_selectColumns)
         .order('created_at', ascending: false);
 
     final lista = reportesData as List;
     if (lista.isEmpty) return [];
 
     final ids = lista.map((r) => r['id'] as String).toList();
+    final autorIds = lista.map((r) => r['usuario_id'] as String).toList();
+    final nombresAutores = await _obtenerNombresPublicos(autorIds);
 
     // Votos
     final votosData = await _client
@@ -314,9 +354,8 @@ class ReportesRepository {
     return lista.map((raw) {
       final json = Map<String, dynamic>.from(raw as Map);
       final id = json['id'] as String;
-      final autorData = json.remove('autor');
-      json['nombre_autor'] =
-          autorData is Map ? autorData['nombre_completo'] : null;
+        final autorId = json['usuario_id'] as String;
+        json['nombre_autor'] = nombresAutores[autorId];
       json['conteo_votos'] = conteoVotos[id] ?? 0;
       json['usuario_ha_votado'] = misVotos.contains(id);
       json['conteo_comentarios'] = conteoComentarios[id] ?? 0;
