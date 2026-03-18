@@ -1,10 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../repositories/auth_repository.dart';
+import '../repositories/foro_repository.dart';
+import '../repositories/notificaciones_repository.dart';
 import '../repositories/reportes_repository.dart';
 import '../models/invitacion_qr.dart';
 import '../models/perfil_usuario.dart';
 import '../models/reporte.dart';
+import '../models/tema_foro.dart';
+import '../models/notificacion_app.dart';
 import '../models/filtros_reporte.dart';
 import '../models/historial_estado.dart';
 import '../services/cache_service.dart';
@@ -21,6 +25,14 @@ final authRepositoryProvider = Provider<AuthRepository>(
 
 final reportesRepositoryProvider = Provider<ReportesRepository>(
   (ref) => ReportesRepository(ref.watch(supabaseClientProvider)),
+);
+
+final foroRepositoryProvider = Provider<ForoRepository>(
+  (ref) => ForoRepository(ref.watch(supabaseClientProvider)),
+);
+
+final notificacionesRepositoryProvider = Provider<NotificacionesRepository>(
+  (ref) => NotificacionesRepository(ref.watch(supabaseClientProvider)),
 );
 
 // ─── Estado de Autenticación ─────────────────────────────────────────────────
@@ -104,6 +116,19 @@ final historialEstadosProvider =
 // ─── Alertas Oficiales ───────────────────────────────────────────────────────
 final alertasProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   return ref.watch(reportesRepositoryProvider).obtenerAlertasActivas();
+});
+
+final temasForoProvider = FutureProvider<List<TemaForo>>((ref) async {
+  return ref.watch(foroRepositoryProvider).obtenerTemasEnriquecidos();
+});
+
+final comentariosTemaProvider =
+    FutureProvider.family<List<Map<String, dynamic>>, String>((ref, temaId) {
+  return ref.watch(foroRepositoryProvider).obtenerComentariosTema(temaId);
+});
+
+final notificacionesProvider = FutureProvider<List<NotificacionApp>>((ref) {
+  return ref.watch(notificacionesRepositoryProvider).obtenerNotificaciones();
 });
 
 final reporteDetallePorIdProvider =

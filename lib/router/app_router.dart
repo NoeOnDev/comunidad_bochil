@@ -14,7 +14,11 @@ import '../screens/location_picker_screen.dart';
 import '../screens/report_form_screen.dart';
 import '../screens/reporte_detalle_screen.dart';
 import '../screens/reporte_detalle_loader_screen.dart';
+import '../screens/crear_tema_screen.dart';
+import '../screens/tema_detalle_screen.dart';
+import '../screens/notificaciones_screen.dart';
 import '../models/reporte.dart';
+import '../models/tema_foro.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final supabase = Supabase.instance.client;
@@ -31,7 +35,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           loc == '/contract-verify' ||
           loc == '/phone-input' ||
           loc == '/otp-verify' ||
-          loc == '/recuperacion';
+          loc == '/recuperacion' ||
+          loc == '/notificaciones';
 
       // Si no está logueado y quiere entrar a una ruta protegida → welcome
       if (!loggedIn && !isPublicRoute) {
@@ -75,6 +80,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const RecuperacionScreen(),
       ),
       GoRoute(
+        path: '/notificaciones',
+        builder: (context, state) => const NotificacionesScreen(),
+      ),
+      GoRoute(
         path: '/location-picker',
         builder: (context, state) => const LocationPickerScreen(),
       ),
@@ -106,6 +115,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return ReporteDetalleLoaderScreen(reporteId: id);
+        },
+      ),
+      GoRoute(
+        path: '/foro/crear',
+        builder: (context, state) => const CrearTemaScreen(),
+      ),
+      GoRoute(
+        path: '/foro/detalle',
+        builder: (context, state) {
+          final tema = state.extra as TemaForo;
+          return TemaDetalleScreen(tema: tema);
         },
       ),
     ],

@@ -351,3 +351,356 @@ FOR EACH ROW
 EXECUTE FUNCTION public.update_modified_column();
 
 COMMIT;
+
+-- ============================================================================
+-- SAPAM Bochil - Migracion Step 5 (Foro Comunitario Ampliado)
+-- Incluye:
+-- 1) Enum categoria_tema
+-- 2) Tabla temas_foro
+-- 3) Tabla comentarios_foro
+-- 4) Tabla votos_foro
+-- 5) Índices + RLS + políticas
+-- 6) Trigger de updated_at para temas_foro
+-- ============================================================================
+
+BEGIN;
+
+-- ----------------------------------------------------------------------------
+-- Enum de categorías para foro
+-- ----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type
+    WHERE typname = 'categoria_tema'
+  ) THEN
+    CREATE TYPE public.categoria_tema AS ENUM (
+      'Propuesta',
+      'Pregunta',
+      'Discusion',
+      'Anuncio'
+    );
+  END IF;
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- Tabla: temas_foro
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.temas_foro (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  usuario_id UUID REFERENCES public.perfiles_usuarios(id) ON DELETE CASCADE NOT NULL,
+  titulo VARCHAR(200) NOT NULL,
+  categoria public.categoria_tema NOT NULL,
+  contenido TEXT NOT NULL,
+  votos_apoyo INTEGER DEFAULT 0,
+  activo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS temas_foro_usuario_id_idx
+  ON public.temas_foro (usuario_id);
+
+CREATE INDEX IF NOT EXISTS temas_foro_categoria_idx
+  ON public.temas_foro (categoria);
+
+CREATE INDEX IF NOT EXISTS temas_foro_created_at_idx
+  ON public.temas_foro (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS temas_foro_activo_idx
+  ON public.temas_foro (activo);
+
+-- ----------------------------------------------------------------------------
+-- Tabla: comentarios_foro
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.comentarios_foro (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tema_id UUID REFERENCES public.temas_foro(id) ON DELETE CASCADE NOT NULL,
+  usuario_id UUID REFERENCES public.perfiles_usuarios(id) ON DELETE CASCADE NOT NULL,
+  comentario TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS comentarios_foro_tema_id_idx
+  ON public.comentarios_foro (tema_id);
+
+CREATE INDEX IF NOT EXISTS comentarios_foro_usuario_id_idx
+  ON public.comentarios_foro (usuario_id);
+
+CREATE INDEX IF NOT EXISTS comentarios_foro_created_at_idx
+  ON public.comentarios_foro (created_at ASC);
+
+-- ----------------------------------------------------------------------------
+-- Tabla: votos_foro
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.votos_foro (
+  tema_id UUID REFERENCES public.temas_foro(id) ON DELETE CASCADE NOT NULL,
+  usuario_id UUID REFERENCES public.perfiles_usuarios(id) ON DELETE CASCADE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+  PRIMARY KEY (tema_id, usuario_id)
+);
+
+CREATE INDEX IF NOT EXISTS votos_foro_usuario_id_idx
+  ON public.votos_foro (usuario_id);
+
+-- ----------------------------------------------------------------------------
+-- RLS
+-- ----------------------------------------------------------------------------
+ALTER TABLE public.temas_foro ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.comentarios_foro ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.votos_foro ENABLE ROW LEVEL SECURITY;
+
+-- ----------------------------------------------------------------------------
+-- Políticas: temas_foro
+-- ----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'temas_foro'
+      AND policyname = 'Ver temas activos del foro'
+  ) THEN
+    CREATE POLICY "Ver temas activos del foro"
+      ON public.temas_foro
+      FOR SELECT
+      USING (activo = true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'temas_foro'
+      AND policyname = 'Crear tema propio'
+  ) THEN
+    CREATE POLICY "Crear tema propio"
+      ON public.temas_foro
+      FOR INSERT
+      WITH CHECK (auth.uid() = usuario_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'temas_foro'
+      AND policyname = 'Editar tema propio'
+  ) THEN
+    CREATE POLICY "Editar tema propio"
+      ON public.temas_foro
+      FOR UPDATE
+      USING (auth.uid() = usuario_id)
+      WITH CHECK (auth.uid() = usuario_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'temas_foro'
+      AND policyname = 'Eliminar tema propio'
+  ) THEN
+    CREATE POLICY "Eliminar tema propio"
+      ON public.temas_foro
+      FOR DELETE
+      USING (auth.uid() = usuario_id);
+  END IF;
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- Políticas: comentarios_foro
+-- ----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'comentarios_foro'
+      AND policyname = 'Ver comentarios de foro'
+  ) THEN
+    CREATE POLICY "Ver comentarios de foro"
+      ON public.comentarios_foro
+      FOR SELECT
+      USING (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'comentarios_foro'
+      AND policyname = 'Crear comentario propio en foro'
+  ) THEN
+    CREATE POLICY "Crear comentario propio en foro"
+      ON public.comentarios_foro
+      FOR INSERT
+      WITH CHECK (auth.uid() = usuario_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'comentarios_foro'
+      AND policyname = 'Eliminar comentario propio en foro'
+  ) THEN
+    CREATE POLICY "Eliminar comentario propio en foro"
+      ON public.comentarios_foro
+      FOR DELETE
+      USING (auth.uid() = usuario_id);
+  END IF;
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- Políticas: votos_foro
+-- ----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'votos_foro'
+      AND policyname = 'Ver votos de foro'
+  ) THEN
+    CREATE POLICY "Ver votos de foro"
+      ON public.votos_foro
+      FOR SELECT
+      USING (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'votos_foro'
+      AND policyname = 'Votar tema propio usuario'
+  ) THEN
+    CREATE POLICY "Votar tema propio usuario"
+      ON public.votos_foro
+      FOR INSERT
+      WITH CHECK (auth.uid() = usuario_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'votos_foro'
+      AND policyname = 'Quitar voto propio en foro'
+  ) THEN
+    CREATE POLICY "Quitar voto propio en foro"
+      ON public.votos_foro
+      FOR DELETE
+      USING (auth.uid() = usuario_id);
+  END IF;
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- Trigger de updated_at para temas_foro
+-- Reutiliza update_modified_column() si ya existe.
+-- ----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc
+    WHERE proname = 'update_modified_column'
+      AND pronamespace = 'public'::regnamespace
+  ) THEN
+    CREATE OR REPLACE FUNCTION public.update_modified_column()
+    RETURNS TRIGGER AS $fn$
+    BEGIN
+      NEW.updated_at = now();
+      RETURN NEW;
+    END;
+    $fn$ LANGUAGE plpgsql;
+  END IF;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_temas_foro_updated_at ON public.temas_foro;
+
+CREATE TRIGGER trg_temas_foro_updated_at
+BEFORE UPDATE ON public.temas_foro
+FOR EACH ROW
+EXECUTE FUNCTION public.update_modified_column();
+
+COMMIT;
+
+-- ============================================================================
+-- SAPAM Bochil - Centro de Notificaciones (lecturas por usuario)
+-- Incluye:
+-- 1) Tabla notificaciones_lecturas
+-- 2) Índices + RLS + políticas
+-- ============================================================================
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.notificaciones_lecturas (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  usuario_id UUID REFERENCES public.perfiles_usuarios(id) ON DELETE CASCADE NOT NULL,
+  tipo VARCHAR(40) NOT NULL CHECK (tipo IN ('alerta_oficial', 'estado_reporte')),
+  origen_id UUID NOT NULL,
+  read_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+  UNIQUE (usuario_id, tipo, origen_id)
+);
+
+CREATE INDEX IF NOT EXISTS notificaciones_lecturas_usuario_id_idx
+  ON public.notificaciones_lecturas (usuario_id);
+
+CREATE INDEX IF NOT EXISTS notificaciones_lecturas_read_at_idx
+  ON public.notificaciones_lecturas (read_at DESC);
+
+ALTER TABLE public.notificaciones_lecturas ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'notificaciones_lecturas'
+      AND policyname = 'Ver lecturas propias'
+  ) THEN
+    CREATE POLICY "Ver lecturas propias"
+      ON public.notificaciones_lecturas
+      FOR SELECT
+      USING (auth.uid() = usuario_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'notificaciones_lecturas'
+      AND policyname = 'Insertar lecturas propias'
+  ) THEN
+    CREATE POLICY "Insertar lecturas propias"
+      ON public.notificaciones_lecturas
+      FOR INSERT
+      WITH CHECK (auth.uid() = usuario_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'notificaciones_lecturas'
+      AND policyname = 'Actualizar lecturas propias'
+  ) THEN
+    CREATE POLICY "Actualizar lecturas propias"
+      ON public.notificaciones_lecturas
+      FOR UPDATE
+      USING (auth.uid() = usuario_id)
+      WITH CHECK (auth.uid() = usuario_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'notificaciones_lecturas'
+      AND policyname = 'Eliminar lecturas propias'
+  ) THEN
+    CREATE POLICY "Eliminar lecturas propias"
+      ON public.notificaciones_lecturas
+      FOR DELETE
+      USING (auth.uid() = usuario_id);
+  END IF;
+END $$;
+
+COMMIT;

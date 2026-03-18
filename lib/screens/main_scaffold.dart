@@ -5,6 +5,7 @@ import '../core/constants.dart';
 import '../services/push_notification_service.dart';
 import 'home_screen.dart';
 import 'feed_comunitario_screen.dart';
+import 'foro_screen.dart';
 import 'perfil_screen.dart';
 
 class MainScaffold extends ConsumerStatefulWidget {
@@ -20,6 +21,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
   final List<Widget> _screens = const [
     HomeScreen(),
     FeedComunitarioScreen(),
+    ForoScreen(),
     PerfilScreen(),
   ];
 
@@ -38,8 +40,8 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
           context.push('/reporte-detalle-id/$reporteIdRaw');
           return;
         }
-        // Fallback: lleva al tab Comunidad si no hay reporte específico.
-        setState(() => _currentIndex = 1);
+        // Fallback: abrir centro de notificaciones.
+        context.push('/notificaciones');
       },
     );
   }
@@ -68,6 +70,11 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
             icon: Icon(Icons.forum_outlined),
             selectedIcon: Icon(Icons.forum, color: AppColors.primary),
             label: 'Comunidad',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.groups_outlined),
+            selectedIcon: Icon(Icons.groups, color: AppColors.primary),
+            label: 'Foro',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

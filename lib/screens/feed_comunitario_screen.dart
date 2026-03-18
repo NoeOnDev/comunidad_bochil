@@ -272,38 +272,39 @@ class _AlertasBanner extends StatelessWidget {
       error: (_, _) => const SizedBox.shrink(),
       data: (lista) {
         if (lista.isEmpty) return const SizedBox.shrink();
+        final alerta = lista.first;
+        final nivel = alerta['nivel_urgencia'] as String? ?? 'informativo';
+        final Color bgColor;
+        final Color borderColor;
+        final IconData icon;
 
-        return Column(
-          children: lista.map((alerta) {
-            final nivel = alerta['nivel_urgencia'] as String? ?? 'informativo';
-            final Color bgColor;
-            final Color borderColor;
-            final IconData icon;
+        switch (nivel) {
+          case 'critico':
+            bgColor = Colors.red.shade50;
+            borderColor = Colors.red.shade300;
+            icon = Icons.warning_amber_rounded;
+          case 'advertencia':
+            bgColor = Colors.orange.shade50;
+            borderColor = Colors.orange.shade300;
+            icon = Icons.info_outline;
+          default:
+            bgColor = Colors.blue.shade50;
+            borderColor = Colors.blue.shade200;
+            icon = Icons.campaign_outlined;
+        }
 
-            switch (nivel) {
-              case 'critico':
-                bgColor = Colors.red.shade50;
-                borderColor = Colors.red.shade300;
-                icon = Icons.warning_amber_rounded;
-              case 'advertencia':
-                bgColor = Colors.orange.shade50;
-                borderColor = Colors.orange.shade300;
-                icon = Icons.info_outline;
-              default:
-                bgColor = Colors.blue.shade50;
-                borderColor = Colors.blue.shade200;
-                icon = Icons.campaign_outlined;
-            }
-
-            return Container(
-              margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: borderColor),
-              ),
-              child: Row(
+        return Container(
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: borderColor),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(icon, color: borderColor, size: 24),
@@ -328,14 +329,33 @@ class _AlertasBanner extends StatelessWidget {
                             color: Colors.grey.shade800,
                             height: 1.3,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-            );
-          }).toList(),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Text(
+                    '${lista.length} alerta${lista.length == 1 ? '' : 's'} disponible${lista.length == 1 ? '' : 's'}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => context.push('/notificaciones'),
+                    child: const Text('Ver todas'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         );
       },
     );
