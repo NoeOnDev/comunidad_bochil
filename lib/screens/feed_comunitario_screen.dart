@@ -8,6 +8,7 @@ import '../core/constants.dart';
 import '../models/reporte.dart';
 import '../providers/providers.dart';
 import '../widgets/comentarios_bottom_sheet.dart';
+import '../widgets/filtros_reportes_sheet.dart';
 import '../widgets/offline_state_widget.dart';
 import '../widgets/report_image_grid.dart';
 import '../providers/connectivity_provider.dart';
@@ -50,10 +51,32 @@ class _FeedComunitarioScreenState extends ConsumerState<FeedComunitarioScreen>
     _cargarPendientes();
   }
 
+  Future<void> _abrirFiltros() async {
+    final actuales = ref.read(filtrosReportesProvider);
+    final reportes = ref.read(todosReportesProvider).valueOrNull ?? [];
+    final colonias = reportes
+        .map((r) => r.colonia.trim())
+        .where((c) => c.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
+    final seleccion = await mostrarFiltrosReportesSheet(
+      context: context,
+      inicial: actuales,
+      coloniasDisponibles: colonias,
+    );
+
+    if (seleccion != null) {
+      ref.read(filtrosReportesProvider.notifier).state = seleccion;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final reportesAsync = ref.watch(todosReportesProvider);
+    final reportesAsync = ref.watch(reportesFiltradosProvider);
     final alertasAsync = ref.watch(alertasProvider);
+    final filtros = ref.watch(filtrosReportesProvider);
     final userId = Supabase.instance.client.auth.currentUser?.id;
     final conectado = ref.watch(conectividadProvider).valueOrNull ?? true;
 
@@ -61,6 +84,29 @@ class _FeedComunitarioScreenState extends ConsumerState<FeedComunitarioScreen>
       appBar: AppBar(
         title: const Text('Comunidad'),
         actions: [
+          IconButton(
+            tooltip: 'Filtrar',
+            onPressed: _abrirFiltros,
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.tune),
+                if (filtros.tieneFiltrosActivos)
+                  Positioned(
+                    right: -1,
+                    top: -1,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: AppColors.error,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _invalidarDatos,

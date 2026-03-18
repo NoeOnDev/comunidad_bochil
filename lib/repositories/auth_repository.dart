@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/invitacion_qr.dart';
 import '../models/perfil_usuario.dart';
+import '../services/push_notification_service.dart';
 
 class AuthRepository {
   final SupabaseClient _client;
@@ -74,6 +75,7 @@ class AuthRepository {
   Future<bool> consolidarRegistro({
     required InvitacionQr invitacion,
     required String telefono,
+    String? email,
   }) async {
     final userId = _client.auth.currentUser!.id;
 
@@ -86,6 +88,7 @@ class AuthRepository {
       'numero_contrato': invitacion.numeroContrato,
       'direccion': invitacion.direccion,
       'colonia': invitacion.colonia,
+      'email': email,
       'telefono': telefono,
       'invitacion_id': invitacion.id,
     });
@@ -111,6 +114,11 @@ class AuthRepository {
     }
   }
 
+  /// Envía un enlace mágico de acceso al correo electrónico.
+  Future<void> enviarMagicLink(String email) async {
+    await _client.auth.signInWithOtp(email: email);
+  }
+
   /// Obtiene el perfil del usuario actual.
   Future<PerfilUsuario?> obtenerPerfil() async {
     final userId = _client.auth.currentUser?.id;
@@ -132,6 +140,7 @@ class AuthRepository {
 
   /// Cierra sesión.
   Future<void> cerrarSesion() async {
+    await PushNotificationService.instance.limpiarTokenActual();
     await _client.auth.signOut();
   }
 }

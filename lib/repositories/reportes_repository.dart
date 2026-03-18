@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/reporte.dart';
+import '../models/historial_estado.dart';
 
 class ReportesRepository {
   final SupabaseClient _client;
@@ -209,6 +210,61 @@ class ReportesRepository {
         .eq('activa', true)
         .order('created_at', ascending: false);
     return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Obtiene el historial cronológico de cambios de estado de un reporte.
+  Future<List<HistorialEstado>> obtenerHistorialEstados(String reporteId) async {
+    final data = await _client
+        .from('historial_estados')
+        .select(
+          'id, reporte_id, estado_anterior, estado_nuevo, cambiado_por, comentario, created_at',
+        )
+        .eq('reporte_id', reporteId)
+        .order('created_at', ascending: true);
+
+    return (data as List)
+        .map((json) => HistorialEstado.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Obtiene un reporte enriquecido por ID para navegación desde notificaciones.
+  Future<Reporte?> obtenerReporteEnriquecidoPorId(String reporteId) async {
+    final userId = _client.auth.currentUser?.id;
+
+    final raw = await _client
+        .from('reportes')
+        .select(
+          '$_selectColumns, autor:perfiles_usuarios!usuario_id(nombre_completo)',
+        )
+        .eq('id', reporteId)
+        .maybeSingle();
+
+    if (raw == null) return null;
+
+    final votosData = await _client
+        .from('votos_reportes')
+        .select('usuario_id')
+        .eq('reporte_id', reporteId);
+
+    final conteoVotos = (votosData as List).length;
+    final usuarioHaVotado = votosData.any((v) => v['usuario_id'] == userId);
+
+    final comentariosData = await _client
+        .from('comentarios_reportes')
+        .select('id')
+        .eq('reporte_id', reporteId);
+
+    final conteoComentarios = (comentariosData as List).length;
+
+    final json = Map<String, dynamic>.from(raw as Map);
+    final autorData = json.remove('autor');
+    json['nombre_autor'] =
+        autorData is Map ? autorData['nombre_completo'] : null;
+    json['conteo_votos'] = conteoVotos;
+    json['usuario_ha_votado'] = usuarioHaVotado;
+    json['conteo_comentarios'] = conteoComentarios;
+
+    return Reporte.fromJson(json);
   }
 
   // ─── Todos los reportes enriquecidos (para tabs Mi Colonia / Mis Reportes) ─

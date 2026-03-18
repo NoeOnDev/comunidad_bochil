@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "622823895967",
+    "project_id": "comunidad-bochil",
+    "storage_bucket": "comunidad-bochil.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:622823895967:android:c38e605c957e52fc8643aa",
+        "android_client_info": {
+          "package_name": "com.example.comunidad_bochil"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlnPk7vnSe81v5TjbEkyt58-qtSoB_jS0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

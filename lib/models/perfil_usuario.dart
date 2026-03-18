@@ -6,6 +6,7 @@ class PerfilUsuario {
   final String? numeroContrato;
   final String? direccion;
   final String? colonia;
+  final String? email;
   final String telefono;
   final String? invitacionId;
   final DateTime createdAt;
@@ -18,6 +19,7 @@ class PerfilUsuario {
     this.numeroContrato,
     this.direccion,
     this.colonia,
+    this.email,
     required this.telefono,
     this.invitacionId,
     required this.createdAt,
@@ -32,6 +34,7 @@ class PerfilUsuario {
       numeroContrato: json['numero_contrato'] as String?,
       direccion: json['direccion'] as String?,
       colonia: json['colonia'] as String?,
+      email: json['email'] as String?,
       telefono: json['telefono'] as String,
       invitacionId: json['invitacion_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
@@ -47,6 +50,7 @@ class PerfilUsuario {
       'numero_contrato': numeroContrato,
       'direccion': direccion,
       'colonia': colonia,
+      'email': email,
       'telefono': telefono,
       'invitacion_id': invitacionId,
       'created_at': createdAt.toIso8601String(),

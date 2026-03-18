@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../core/constants.dart';
+import '../services/push_notification_service.dart';
 import 'home_screen.dart';
 import 'feed_comunitario_screen.dart';
 import 'perfil_screen.dart';
@@ -20,6 +22,27 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
     FeedComunitarioScreen(),
     PerfilScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _iniciarPush();
+  }
+
+  Future<void> _iniciarPush() async {
+    await PushNotificationService.instance.init(
+      onNotificationTap: (data) async {
+        if (!mounted) return;
+        final reporteIdRaw = data['reporte_id']?.toString().trim();
+        if (reporteIdRaw != null && reporteIdRaw.isNotEmpty) {
+          context.push('/reporte-detalle-id/$reporteIdRaw');
+          return;
+        }
+        // Fallback: lleva al tab Comunidad si no hay reporte específico.
+        setState(() => _currentIndex = 1);
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

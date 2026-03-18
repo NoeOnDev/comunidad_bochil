@@ -8,10 +8,12 @@ import '../screens/scanner_screen.dart';
 import '../screens/contract_verify_screen.dart';
 import '../screens/phone_input_screen.dart';
 import '../screens/otp_verify_screen.dart';
+import '../screens/recuperacion_screen.dart';
 import '../screens/main_scaffold.dart';
 import '../screens/location_picker_screen.dart';
 import '../screens/report_form_screen.dart';
 import '../screens/reporte_detalle_screen.dart';
+import '../screens/reporte_detalle_loader_screen.dart';
 import '../models/reporte.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -28,7 +30,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           loc == '/scanner' ||
           loc == '/contract-verify' ||
           loc == '/phone-input' ||
-          loc == '/otp-verify';
+          loc == '/otp-verify' ||
+          loc == '/recuperacion';
 
       // Si no está logueado y quiere entrar a una ruta protegida → welcome
       if (!loggedIn && !isPublicRoute) {
@@ -68,6 +71,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const OtpVerifyScreen(),
       ),
       GoRoute(
+        path: '/recuperacion',
+        builder: (context, state) => const RecuperacionScreen(),
+      ),
+      GoRoute(
         path: '/location-picker',
         builder: (context, state) => const LocationPickerScreen(),
       ),
@@ -92,6 +99,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final reporte = state.extra as Reporte;
           return ReporteDetalleScreen(reporte: reporte);
+        },
+      ),
+      GoRoute(
+        path: '/reporte-detalle-id/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return ReporteDetalleLoaderScreen(reporteId: id);
         },
       ),
     ],

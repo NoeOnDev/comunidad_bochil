@@ -130,6 +130,11 @@ class _PhoneInputScreenState extends ConsumerState<PhoneInputScreen> {
                         )
                       : const Text('Enviar Código'),
                 ),
+                const SizedBox(height: 10),
+                TextButton(
+                  onPressed: _enviando ? null : () => context.push('/recuperacion'),
+                  child: const Text('¿No puedes recibir SMS? Recupera acceso por correo'),
+                ),
               ],
             ),
           ),

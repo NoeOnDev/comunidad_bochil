@@ -425,9 +425,3 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
 - Uso en app:
   - Login de usuarios existentes.
   - Registro de nuevos usuarios (combinado con invitaciones y perfil).
-
-## 8. Cierre de Pendientes Tecnicos
-
-- Resuelto: se retiro OfflineSyncService (SharedPreferences) para dejar una sola ruta oficial de sincronizacion offline (SyncService + LocalDatabaseService).
-- Resuelto: se elimino la duplicidad de "Mis reportes"; se retiro MisReportesScreen y su ruta dedicada, manteniendo como fuente unica la pestaña de Comunidad.
-- Resuelto: contexto.md y debug.md quedaron sincronizados usando debug.md como base vigente.

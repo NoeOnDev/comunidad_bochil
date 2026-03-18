@@ -10,6 +10,7 @@ import '../core/cached_tile_layer.dart';
 import '../models/reporte.dart';
 import '../providers/providers.dart';
 import '../widgets/comentarios_bottom_sheet.dart';
+import '../widgets/timeline_estados_widget.dart';
 
 class ReporteDetalleScreen extends ConsumerStatefulWidget {
   final Reporte reporte;
@@ -301,6 +302,42 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
                     label: 'Fecha de creación',
                     value: _formatearFecha(reporte.createdAt),
                   ),
+                  const SizedBox(height: 10),
+                  _InfoTile(
+                    icon: Icons.hourglass_bottom,
+                    label: reporte.estado == EstadoReporte.resuelto
+                        ? 'Tiempo de resolución'
+                        : 'Tiempo transcurrido',
+                    value: _formatearDuracion(
+                      reporte.estado == EstadoReporte.resuelto
+                          ? reporte.updatedAt.difference(reporte.createdAt)
+                          : DateTime.now().difference(reporte.createdAt),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  const Text(
+                    'Seguimiento y SLA',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Objetivo de servicio sugerido: 72 horas',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TimelineEstadosWidget(
+                    reporteId: reporte.id,
+                    fechaCreacion: reporte.createdAt,
+                    estadoActual: reporte.estado,
+                  ),
                   const SizedBox(height: 16),
 
                   // Botones de acción: Apoyar + Comentar
@@ -453,6 +490,18 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
       'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
     ];
     return '${dt.day} de ${meses[dt.month - 1]} de ${dt.year}';
+  }
+
+  String _formatearDuracion(Duration duracion) {
+    if (duracion.inDays >= 1) {
+      final horas = duracion.inHours % 24;
+      return '${duracion.inDays}d ${horas}h';
+    }
+    if (duracion.inHours >= 1) {
+      final minutos = duracion.inMinutes % 60;
+      return '${duracion.inHours}h ${minutos}m';
+    }
+    return '${duracion.inMinutes}m';
   }
 }
 

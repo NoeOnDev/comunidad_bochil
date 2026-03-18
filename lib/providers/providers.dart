@@ -5,6 +5,8 @@ import '../repositories/reportes_repository.dart';
 import '../models/invitacion_qr.dart';
 import '../models/perfil_usuario.dart';
 import '../models/reporte.dart';
+import '../models/filtros_reporte.dart';
+import '../models/historial_estado.dart';
 import '../services/cache_service.dart';
 
 // ─── Supabase Client ─────────────────────────────────────────────────────────
@@ -80,7 +82,33 @@ final todosReportesProvider = FutureProvider<List<Reporte>>((ref) async {
   }
 });
 
+// ─── Filtros del feed comunitario ───────────────────────────────────────────
+final filtrosReportesProvider = StateProvider<FiltrosReporte>(
+  (ref) => const FiltrosReporte(),
+);
+
+final reportesFiltradosProvider = Provider<AsyncValue<List<Reporte>>>((ref) {
+  final reportesAsync = ref.watch(todosReportesProvider);
+  final filtros = ref.watch(filtrosReportesProvider);
+  return reportesAsync.whenData(filtros.aplicar);
+});
+
+// ─── Historial de estados por reporte (SLA / timeline) ─────────────────────
+final historialEstadosProvider =
+    FutureProvider.family<List<HistorialEstado>, String>((ref, reporteId) {
+  return ref
+      .watch(reportesRepositoryProvider)
+      .obtenerHistorialEstados(reporteId);
+});
+
 // ─── Alertas Oficiales ───────────────────────────────────────────────────────
 final alertasProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   return ref.watch(reportesRepositoryProvider).obtenerAlertasActivas();
+});
+
+final reporteDetallePorIdProvider =
+    FutureProvider.family<Reporte?, String>((ref, reporteId) {
+  return ref
+      .watch(reportesRepositoryProvider)
+      .obtenerReporteEnriquecidoPorId(reporteId);
 });
