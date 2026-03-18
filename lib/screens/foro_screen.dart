@@ -31,8 +31,9 @@ class _ForoScreenState extends ConsumerState<ForoScreen>
     super.dispose();
   }
 
-  void _refrescar() {
+  Future<void> _refrescar() async {
     ref.invalidate(temasForoProvider);
+    await ref.read(temasForoProvider.future);
   }
 
   List<TemaForo> _filtrarPorCategoria(
@@ -60,7 +61,6 @@ class _ForoScreenState extends ConsumerState<ForoScreen>
             onPressed: () => context.push('/notificaciones'),
             icon: const Icon(Icons.notifications_outlined),
           ),
-          IconButton(onPressed: _refrescar, icon: const Icon(Icons.refresh)),
           IconButton(
             tooltip: 'Crear tema',
             onPressed: () async {
@@ -92,20 +92,26 @@ class _ForoScreenState extends ConsumerState<ForoScreen>
           Expanded(
             child: temasAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, _) => OfflineStateWidget(onReintentar: _refrescar),
+              error: (_, _) => OfflineStateWidget(onReintentar: () => _refrescar()),
               data: (temas) {
                 return TabBarView(
                   controller: _tabController,
                   children: [
-                    _ListaTemas(temas: _filtrarPorCategoria(temas, null)),
+                    _ListaTemas(
+                      temas: _filtrarPorCategoria(temas, null),
+                      onRefresh: _refrescar,
+                    ),
                     _ListaTemas(
                       temas: _filtrarPorCategoria(temas, CategoriaTema.propuesta),
+                      onRefresh: _refrescar,
                     ),
                     _ListaTemas(
                       temas: _filtrarPorCategoria(temas, CategoriaTema.pregunta),
+                      onRefresh: _refrescar,
                     ),
                     _ListaTemas(
                       temas: _filtrarPorCategoria(temas, CategoriaTema.discusion),
+                      onRefresh: _refrescar,
                     ),
                   ],
                 );
@@ -120,25 +126,35 @@ class _ForoScreenState extends ConsumerState<ForoScreen>
 
 class _ListaTemas extends StatelessWidget {
   final List<TemaForo> temas;
+  final Future<void> Function() onRefresh;
 
-  const _ListaTemas({required this.temas});
+  const _ListaTemas({required this.temas, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
-    if (temas.isEmpty) {
-      return const Center(
-        child: Text(
-          'Aún no hay temas en esta categoría.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-      );
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.only(bottom: 8),
-      itemCount: temas.length,
-      separatorBuilder: (_, _) => Container(height: 8, color: Colors.grey.shade100),
-      itemBuilder: (_, index) => TemaCard(tema: temas[index]),
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: temas.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                SizedBox(height: 180),
+                Center(
+                  child: Text(
+                    'Aún no hay temas en esta categoría.',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            )
+          : ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 8),
+              itemCount: temas.length,
+              separatorBuilder: (_, _) =>
+                  Container(height: 8, color: Colors.grey.shade100),
+              itemBuilder: (_, index) => TemaCard(tema: temas[index]),
+            ),
     );
   }
 }

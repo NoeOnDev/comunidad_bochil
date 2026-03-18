@@ -53,6 +53,15 @@ Hay 2 caminos de acceso:
   - INSERT en registro inicial.
   - SELECT para cargar perfil del usuario actual.
 
+### Recuperacion de acceso por correo (magic link)
+
+- Flujo:
+  - Pantalla publica de recuperacion por correo.
+  - Envio de magic link con Supabase Auth.
+  - Reingreso a la app mediante enlace seguro.
+- Operacion adicional relevante:
+  - Al cerrar sesion, se limpia token de dispositivo para evitar push a sesiones cerradas.
+
 ## 2.2 Inicio (Mapa principal)
 
 ### Que hace
@@ -122,6 +131,12 @@ Hay 2 caminos de acceso:
   - votos y comentarios
 - Permite votar y comentar desde la card.
 - Incluye pull-to-refresh.
+- Incluye filtros locales avanzados en "Todos los reportes":
+  - categoria
+  - estado
+  - colonia
+  - fecha (rango)
+- Se compacto la seccion de alertas para mostrar solo destacada y acceso a centro completo.
 
 ### Tablas involucradas
 
@@ -138,7 +153,7 @@ Hay 2 caminos de acceso:
 
 ### Nota importante
 
-- El feed tambien consulta alertas_oficiales para mostrar banners.
+- El feed tambien consulta alertas_oficiales para mostrar banner compacto.
 - Esta tabla SI esta definida en [debug.md](debug.md), junto con su RLS y politica de lectura de alertas activas.
 
 ## 2.5 Detalle del Reporte
@@ -153,6 +168,7 @@ Hay 2 caminos de acceso:
   - votar (apoyar)
   - abrir comentarios
   - eliminar reporte propio solo si esta en estado Pendiente
+- Incluye timeline visual de estado/SLA del reporte a partir de historial de cambios.
 
 ### Tablas involucradas
 
@@ -163,8 +179,38 @@ Hay 2 caminos de acceso:
   - INSERT/DELETE por toggle.
 - comentarios_reportes
   - Lectura/escritura mediante modal de comentarios.
+- historial_estados
+  - SELECT para timeline de estados por reporte.
 
-## 2.6 Comentarios
+## 2.6 Foro Comunitario (Ampliado)
+
+### Que hace
+
+- Agrega una pestaña dedicada de Foro dentro de la navegacion principal.
+- Permite crear temas comunitarios por categoria:
+  - Propuesta
+  - Pregunta
+  - Discusion
+  - Anuncio
+- Muestra feed de temas con autor, votos y conteo de comentarios.
+- Permite entrar al detalle del tema para comentar y votar.
+
+### Tablas involucradas
+
+- temas_foro
+  - SELECT de temas activos.
+  - INSERT para crear tema propio.
+  - UPDATE/DELETE para gestionar tema propio.
+- comentarios_foro
+  - SELECT por tema.
+  - INSERT de comentario propio.
+- votos_foro
+  - SELECT para conteo y voto del usuario.
+  - INSERT/DELETE para toggle de voto.
+- perfiles_usuarios
+  - JOIN para nombre de autor en temas y comentarios.
+
+## 2.7 Comentarios (Reportes)
 
 ### Que hace
 
@@ -180,13 +226,14 @@ Hay 2 caminos de acceso:
 - perfiles_usuarios
   - JOIN para nombre del autor en cada comentario.
 
-## 2.7 Perfil
+## 2.8 Perfil
 
 ### Que hace
 
 - Muestra datos del usuario autenticado:
   - nombre
   - telefono
+  - email (cuando esta registrado)
   - colonia
   - numero de contrato
 - Permite cerrar sesion.
@@ -204,7 +251,49 @@ Hay 2 caminos de acceso:
 - SharedPreferences
   - Cache de perfil para lectura offline.
 
-## 2.8 Sincronizacion Offline y Cache
+## 2.9 Centro de Notificaciones
+
+### Que hace
+
+- Consolida notificaciones de dos origenes:
+  - alertas oficiales
+  - cambios de estado de mis reportes
+- Permite marcar notificaciones como leidas por usuario.
+- Se integra con push: al tocar notificacion remota sin reporte_id, abre este centro.
+
+### Tablas involucradas
+
+- alertas_oficiales
+  - SELECT de alertas activas para fuente de notificaciones.
+- historial_estados
+  - SELECT de cambios de estado para reportes del usuario.
+- reportes
+  - SELECT para relacionar estado con reporte propio.
+- notificaciones_lecturas
+  - SELECT para estado leida/no leida.
+  - INSERT/UPDATE/DELETE para persistencia de lectura por usuario.
+
+## 2.10 Notificaciones Push
+
+### Que hace
+
+- Registra token FCM por dispositivo y plataforma.
+- Recibe push en background y foreground.
+- En foreground muestra notificacion local real para mejorar UX.
+- Al tocar una notificacion:
+  - si incluye reporte_id, abre detalle de reporte.
+  - si no incluye reporte_id, abre centro de notificaciones.
+
+### Tablas y backend involucrados
+
+- device_tokens
+  - SELECT/INSERT/UPDATE/DELETE de tokens propios.
+- historial_estados / alertas_oficiales
+  - Origen funcional de eventos de notificacion.
+- Supabase Edge Functions
+  - Funcion server-side para envio push via FCM v1.
+
+## 2.11 Sincronizacion Offline y Cache
 
 ### Sincronizacion automatica
 
@@ -247,24 +336,43 @@ Hay 2 caminos de acceso:
 | Feed comunitario | perfiles_usuarios | JOIN para autor |
 | Feed comunitario | votos_reportes | SELECT, INSERT, DELETE |
 | Feed comunitario | comentarios_reportes | SELECT |
+| Feed comunitario | alertas_oficiales | SELECT (banner compacto) |
+| Feed comunitario | historial_estados | SELECT (estado/timeline en detalle) |
 | Comentarios | comentarios_reportes | SELECT, INSERT |
 | Comentarios | perfiles_usuarios | JOIN para autor |
 | Detalle reporte | reportes | DELETE (propio en Pendiente) |
 | Detalle reporte | votos_reportes | SELECT, INSERT, DELETE |
-| Alertas (banner feed) | alertas_oficiales | SELECT |
+| Detalle reporte | historial_estados | SELECT |
+| Foro comunitario | temas_foro | SELECT, INSERT, UPDATE, DELETE |
+| Foro comunitario | comentarios_foro | SELECT, INSERT, DELETE |
+| Foro comunitario | votos_foro | SELECT, INSERT, DELETE |
+| Foro comunitario | perfiles_usuarios | JOIN para autor |
+| Centro de notificaciones | alertas_oficiales | SELECT |
+| Centro de notificaciones | historial_estados | SELECT |
+| Centro de notificaciones | reportes | SELECT |
+| Centro de notificaciones | notificaciones_lecturas | SELECT, INSERT, UPDATE, DELETE |
+| Push notifications | device_tokens | SELECT, INSERT, UPDATE, DELETE |
+| Recuperacion por email | auth.users | magic link (OTP por correo) |
 
 ## 4. Pantallas Disponibles y Estado
 
 - En uso dentro del flujo principal:
   - Welcome, Scanner, ContractVerify, PhoneInput, OTPVerify
-  - MainScaffold (Inicio, Comunidad, Perfil)
-  - LocationPicker, ReportForm, ReporteDetalle
+  - Recuperacion
+  - MainScaffold (Inicio, Comunidad, Foro, Perfil)
+  - LocationPicker, ReportForm, ReporteDetalle, ReporteDetalleLoader
+  - Foro, CrearTema, TemaDetalle
+  - Notificaciones
 - Retirada para evitar duplicidad funcional:
   - MisReportesScreen (la vista oficial de "Mis reportes" es la pestaña dentro de Comunidad)
 
 ## 5. Consideraciones Tecnicas Relevantes
 
 - La app depende de politicas RLS para permitir operaciones de ciudadano autenticado.
+- Se incorporo centro de notificaciones con persistencia de lectura por usuario (tabla notificaciones_lecturas).
+- Se incorporo historial de estados para trazabilidad y timeline del ciclo de vida de reportes.
+- Push notifications operan con FCM v1 desde funcion server-side, no con API legado.
+- El cliente movil debe usar clave publishable/anon publica, nunca service_role.
 - Se observa una implementacion dual de sincronizacion offline:
   - En uso: SyncService + LocalDatabaseService (sqflite).
   - Legada/no conectada al flujo actual: OfflineSyncService (SharedPreferences).
@@ -278,8 +386,13 @@ Actualmente ya esta implementado el flujo ciudadano end-to-end:
 2. Captura y envio de reportes geolocalizados con evidencia fotografica.
 3. Mapa de reportes y detalle completo.
 4. Feed comunitario con privacidad, votos y comentarios.
-5. Perfil de usuario con cierre de sesion.
-6. Operacion offline real con cola local y sincronizacion automatica.
+5. Foro comunitario ampliado con creacion de temas, votos y comentarios.
+6. Timeline de estados/SLA por reporte con trazabilidad historica.
+7. Centro de notificaciones unificado (alertas + cambios de estado) con lecturas por usuario.
+8. Notificaciones push end-to-end con deep-link contextual.
+9. Recuperacion de acceso por email (magic link).
+10. Perfil de usuario con cierre de sesion y limpieza de token de push.
+11. Operacion offline real con cola local y sincronizacion automatica.
 
 Con esto, la app ya cubre las funcionalidades nucleares para ciudadanos en produccion temprana, con integracion completa a Supabase y soporte de conectividad intermitente.
 
@@ -317,6 +430,7 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
   - direccion
   - colonia
   - telefono
+  - email
   - invitacion_id
 - Politicas RLS relevantes:
   - SELECT solo perfil propio (auth.uid() = id).
@@ -401,9 +515,106 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
 - Politicas RLS relevantes:
   - SELECT de alertas activas (activa = true).
 - Uso en app:
-  - Banner de alertas oficiales en modulo Comunidad.
+  - Banner compacto de alertas oficiales en modulo Comunidad.
+  - Fuente del centro de notificaciones.
 
-### 7.7 storage.objects (bucket evidencia_reportes)
+### 7.7 public.historial_estados
+
+- Estado: Implementada y en uso.
+- Campos clave usados por app:
+  - id
+  - reporte_id
+  - estado_anterior
+  - estado_nuevo
+  - cambiado_por
+  - comentario
+  - created_at
+- Politicas RLS relevantes:
+  - SELECT abierto para lectura de historial de reportes.
+- Uso en app:
+  - Timeline de estados en detalle de reporte.
+  - Fuente del centro de notificaciones para cambios de estado.
+
+### 7.8 public.device_tokens
+
+- Estado: Implementada y en uso.
+- Campos clave usados por app:
+  - id
+  - usuario_id
+  - token
+  - plataforma
+  - created_at
+  - updated_at
+- Politicas RLS relevantes:
+  - SELECT/INSERT/UPDATE/DELETE restringido a token propio.
+- Uso en app:
+  - Registro y mantenimiento de tokens FCM del usuario autenticado.
+  - Limpieza de token al cerrar sesion.
+
+### 7.9 public.temas_foro
+
+- Estado: Implementada y en uso.
+- Campos clave usados por app:
+  - id
+  - usuario_id
+  - titulo
+  - categoria
+  - contenido
+  - votos_apoyo
+  - activo
+  - created_at
+  - updated_at
+- Politicas RLS relevantes:
+  - SELECT de temas activos.
+  - INSERT/UPDATE/DELETE de tema propio.
+- Uso en app:
+  - Feed del foro por categoria.
+  - Creacion y gestion de temas comunitarios.
+
+### 7.10 public.comentarios_foro
+
+- Estado: Implementada y en uso.
+- Campos clave usados por app:
+  - id
+  - tema_id
+  - usuario_id
+  - comentario
+  - created_at
+- Politicas RLS relevantes:
+  - SELECT publico.
+  - INSERT de comentario propio.
+  - DELETE de comentario propio.
+- Uso en app:
+  - Conversacion dentro del detalle de tema de foro.
+
+### 7.11 public.votos_foro
+
+- Estado: Implementada y en uso.
+- Campos clave usados por app:
+  - tema_id
+  - usuario_id
+  - created_at
+- Politicas RLS relevantes:
+  - SELECT publico.
+  - INSERT/DELETE de voto propio.
+- Uso en app:
+  - Reaccion de apoyo en temas de foro.
+
+### 7.12 public.notificaciones_lecturas
+
+- Estado: Implementada y en uso.
+- Campos clave usados por app:
+  - id
+  - usuario_id
+  - tipo
+  - origen_id
+  - read_at
+- Politicas RLS relevantes:
+  - SELECT/INSERT/UPDATE/DELETE solo para lecturas propias.
+- Uso en app:
+  - Persistir estado leida/no leida del centro de notificaciones.
+
+### 7.13 storage.objects (bucket evidencia_reportes)
 
 - Estado: Implementada y en uso.
 - Configuracion relevante:
@@ -415,12 +626,13 @@ Esta seccion consolida, por cada tabla principal, su estado funcional actual con
   - Carga de evidencia fotografica al crear reporte.
   - Lectura de URL publica en cards/detalle.
 
-### 7.8 auth.users (Supabase Auth)
+### 7.14 auth.users (Supabase Auth)
 
 - Estado: Implementada y en uso.
 - Operaciones usadas por app:
   - signInWithOtp (envio SMS).
   - verifyOtp (validacion de codigo).
+  - signInWithOtp via email (magic link).
   - signOut.
 - Uso en app:
   - Login de usuarios existentes.

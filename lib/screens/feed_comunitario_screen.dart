@@ -107,10 +107,6 @@ class _FeedComunitarioScreenState extends ConsumerState<FeedComunitarioScreen>
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _invalidarDatos,
-          ),
         ],
         bottom: TabBar(
           controller: _tabController,
