@@ -7,7 +7,7 @@ const String supabaseUrl = 'https://goeeptzfmaunnlgaldla.supabase.co';
 const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvZWVwdHpmbWF1bm5sZ2FsZGxhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMTI3MzMsImV4cCI6MjA4ODc4ODczM30.75YpSVMm8AMRLWw0x1kpacXKhX0GaGT4Z2pD5hxlXyU';
 
 /// Coordenadas de Bochil, Chiapas (centro del municipio).
-final LatLng bochilCenter = LatLng(17.0386, -92.8883);
+final LatLng bochilCenter = LatLng(16.995714, -92.893498);
 
 /// Colores institucionales SAPAM.
 class AppColors {

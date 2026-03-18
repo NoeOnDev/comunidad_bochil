@@ -41,6 +41,7 @@ dependencies:
 
   # Geolocalización
   geolocator: ^13.0.2
+  geocoding: ^3.0.0
 
   # Mapas OpenStreetMap
   flutter_map: ^7.0.2

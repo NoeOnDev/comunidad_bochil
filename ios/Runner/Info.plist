@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Usamos tu ubicacion para centrar el mapa y reportar incidencias de agua en tu zona.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Usamos tu ubicacion para centrar el mapa y reportar incidencias de agua en tu zona.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

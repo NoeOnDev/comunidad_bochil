@@ -74,8 +74,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/report-form',
         builder: (context, state) {
-          final ubicacion = state.extra as LatLng;
-          return ReportFormScreen(ubicacion: ubicacion);
+          final extra = state.extra;
+
+          if (extra is Map<String, dynamic>) {
+            return ReportFormScreen(
+              ubicacion: extra['ubicacion'] as LatLng,
+              direccionLegible: extra['direccionLegible'] as String?,
+              coloniaSeleccionada: extra['colonia'] as String?,
+            );
+          }
+
+          return ReportFormScreen(ubicacion: extra as LatLng);
         },
       ),
       GoRoute(

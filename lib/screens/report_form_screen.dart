@@ -11,8 +11,15 @@ import '../services/local_database_service.dart';
 
 class ReportFormScreen extends ConsumerStatefulWidget {
   final LatLng ubicacion;
+  final String? direccionLegible;
+  final String? coloniaSeleccionada;
 
-  const ReportFormScreen({super.key, required this.ubicacion});
+  const ReportFormScreen({
+    super.key,
+    required this.ubicacion,
+    this.direccionLegible,
+    this.coloniaSeleccionada,
+  });
 
   @override
   ConsumerState<ReportFormScreen> createState() => _ReportFormScreenState();
@@ -133,7 +140,10 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
         }
 
         final perfil = await ref.read(authRepositoryProvider).obtenerPerfil();
-        final colonia = perfil?.colonia ?? 'Sin colonia';
+        final coloniaGeocodificada = widget.coloniaSeleccionada?.trim() ?? '';
+        final colonia = coloniaGeocodificada.isNotEmpty
+          ? coloniaGeocodificada
+          : (perfil?.colonia ?? 'Sin colonia');
 
         await reportesRepo.crearReporte(
           titulo: _tituloController.text.trim(),
@@ -160,7 +170,10 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
         // ─── Sin internet: guardar en cola local (sqflite) ───
         // Intentar obtener colonia del perfil cacheado (SharedPreferences)
         final perfilCacheado = await CacheService.obtenerPerfilCacheado();
-        final colonia = perfilCacheado?.colonia ?? 'Sin colonia';
+        final coloniaGeocodificada = widget.coloniaSeleccionada?.trim() ?? '';
+        final colonia = coloniaGeocodificada.isNotEmpty
+            ? coloniaGeocodificada
+            : (perfilCacheado?.colonia ?? 'Sin colonia');
 
         final pendiente = ReportePendiente(
           titulo: _tituloController.text.trim(),
@@ -360,6 +373,38 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
                                 'Lat: ${widget.ubicacion.latitude.toStringAsFixed(6)}, '
                                 'Lon: ${widget.ubicacion.longitude.toStringAsFixed(6)}',
                                 style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Direccion legible (reverse geocoding)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.location_on,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                widget.direccionLegible ??
+                                    'Direccion no disponible sin conexion (Ubicacion GPS guardada)',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textPrimary,
+                                  height: 1.3,
+                                ),
                               ),
                             ),
                           ],
