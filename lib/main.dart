@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'core/constants.dart';
+import 'core/env.dart';
 import 'core/theme.dart';
 import 'core/cached_tile_layer.dart';
 import 'firebase_options.dart';
@@ -23,9 +23,11 @@ Future<void> main() async {
     PushNotificationService.firebaseMessagingBackgroundHandler,
   );
 
+  Env.validar();
+
   await Supabase.initialize(
-    url: supabaseUrl,
-    anonKey: supabaseAnonKey,
+    url: Env.supabaseUrl,
+    anonKey: Env.supabasePublishableKey,
   );
 
   await CachedTileLayerBuilder.init();

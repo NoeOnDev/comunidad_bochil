@@ -43,3 +43,19 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Entornos y secretos
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+*.keystore
+service-account*.json
+firebase-service-account*.json
+
+# Config local Firebase (no subir)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+macos/Runner/GoogleService-Info.plist

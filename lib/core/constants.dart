@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
-/// Credenciales de Supabase.
-/// Reemplaza con tus valores reales desde el dashboard de Supabase.
-const String supabaseUrl = 'https://goeeptzfmaunnlgaldla.supabase.co';
-const String supabaseAnonKey = 'sb_publishable__P6eCxBay_vZgv3HBDr-cw__ohV7mPA';
-
 /// Coordenadas de Bochil, Chiapas (centro del municipio).
 final LatLng bochilCenter = LatLng(16.995714, -92.893498);
 
