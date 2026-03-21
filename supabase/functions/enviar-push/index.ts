@@ -105,28 +105,85 @@ async function handleAlertas(record: Record<string, unknown>) {
   const titulo = String(record.titulo ?? 'Alerta oficial')
   const mensaje = String(record.mensaje ?? '')
 
-  const { data: tokens, error: tokenError } = await supabase
+  const aplicaTodasCalles = Boolean(record.aplica_todas_calles ?? false)
+  const callesObjetivo = extractTargetStreets(record.calles_objetivo)
+  const requiereFiltroPorCalle = callesObjetivo.length > 0 && !aplicaTodasCalles
+
+  const { data: tokenRows, error: tokenError } = await supabase
     .from('device_tokens')
-    .select('token')
+    .select('token, perfiles_usuarios!inner(calle)')
 
   if (tokenError) {
     return json({ ok: false, error: tokenError.message }, 500)
   }
 
-  if (!tokens || tokens.length === 0) {
+  if (!tokenRows || tokenRows.length === 0) {
     return json({ ok: true, sent: 0, reason: 'No device tokens' })
   }
 
-  const uniqueTokens = [...new Set(tokens.map((t) => String(t.token)))]
+  const normalizedTargetStreets = new Set(callesObjetivo.map(normalizeStreet))
+
+  const filteredRows = requiereFiltroPorCalle
+    ? tokenRows.filter((row) => {
+        const calle = getStreetFromJoin(row)
+        if (!calle) return false
+        return normalizedTargetStreets.has(normalizeStreet(calle))
+      })
+    : tokenRows
+
+  const uniqueTokens = [...new Set(filteredRows.map((t) => String(t.token)))]
+
+  if (uniqueTokens.length === 0) {
+    return json({
+      ok: true,
+      sent: 0,
+      reason: requiereFiltroPorCalle
+        ? 'No tokens matched target streets'
+        : 'No device tokens',
+      target_streets: requiereFiltroPorCalle ? callesObjetivo : undefined,
+    })
+  }
 
   const results = await Promise.all(
     uniqueTokens.map((token) => sendFcmV1(token, titulo, mensaje, {
       tipo: 'alerta_oficial',
+      alerta_id: String(record.id ?? ''),
     })),
   )
 
   const sent = results.filter((r) => r.ok).length
-  return json({ ok: true, sent, total: uniqueTokens.length, table: 'alertas_oficiales' })
+  return json({
+    ok: true,
+    sent,
+    total: uniqueTokens.length,
+    table: 'alertas_oficiales',
+    target_streets: requiereFiltroPorCalle ? callesObjetivo : undefined,
+  })
+}
+
+function extractTargetStreets(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((street) => String(street ?? '').trim())
+    .filter((street) => street.length > 0)
+}
+
+function getStreetFromJoin(row: Record<string, unknown>): string {
+  const perfil = row.perfiles_usuarios
+  if (Array.isArray(perfil)) {
+    const first = perfil[0] as Record<string, unknown> | undefined
+    return String(first?.calle ?? '')
+  }
+
+  if (perfil && typeof perfil === 'object') {
+    return String((perfil as Record<string, unknown>).calle ?? '')
+  }
+
+  return ''
+}
+
+function normalizeStreet(value: string): string {
+  return value.trim().toLowerCase()
 }
 
 async function sendFcmV1(

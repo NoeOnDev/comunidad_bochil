@@ -335,7 +335,7 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
                                   ),
                                   Text(
                                     _esPrivado
-                                        ? 'Solo visible para el SAPAM'
+                                        ? 'Solo visible para el equipo administrador'
                                         : 'Visible en el Feed Comunitario',
                                     style: TextStyle(
                                       fontSize: 12,

@@ -17,8 +17,8 @@ class PushNotificationService {
 
   static const AndroidNotificationChannel _androidChannel =
       AndroidNotificationChannel(
-        'sapam_alertas',
-        'Alertas SAPAM',
+        'comunidad_alertas',
+        'Alertas Comunidad Bochil',
         description: 'Notificaciones de reportes y alertas oficiales',
         importance: Importance.high,
       );
@@ -115,7 +115,7 @@ class PushNotificationService {
   }
 
   Future<void> _mostrarNotificacionLocal(RemoteMessage message) async {
-    final title = message.notification?.title ?? 'Notificación SAPAM';
+    final title = message.notification?.title ?? 'Notificación Comunidad Bochil';
     final body = message.notification?.body ?? 'Tienes una actualización.';
 
     final payload = jsonEncode(message.data);

@@ -38,6 +38,7 @@ CREATE TABLE public.perfiles_usuarios (
     numero_contrato VARCHAR(50),
     direccion TEXT,
     colonia VARCHAR(100),
+    calle VARCHAR(160),
     telefono VARCHAR(20) UNIQUE NOT NULL,
     invitacion_id UUID REFERENCES public.invitaciones_qr(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -146,6 +147,8 @@ CREATE TABLE public.alertas_oficiales (
     mensaje TEXT NOT NULL,
     nivel_urgencia VARCHAR(20) DEFAULT 'informativo', -- 'informativo', 'advertencia', 'critico'
     activa BOOLEAN DEFAULT true,
+  aplica_todas_calles BOOLEAN DEFAULT true,
+  calles_objetivo TEXT[] DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

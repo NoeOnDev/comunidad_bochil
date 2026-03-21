@@ -72,7 +72,7 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('¡Registro exitoso! Bienvenido a SAPAM Bochil.'),
+            content: Text('¡Registro exitoso! Bienvenido a Comunidad Bochil.'),
             backgroundColor: Colors.green,
           ),
         );

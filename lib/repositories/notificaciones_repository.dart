@@ -9,6 +9,8 @@ class NotificacionesRepository {
   Future<List<NotificacionApp>> obtenerNotificaciones() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return [];
+    final calleUsuario = await _obtenerCalleUsuario(userId);
+    final calleUsuarioNormalizada = _normalizarTexto(calleUsuario);
 
     final lecturasData = await _client
         .from('notificaciones_lecturas')
@@ -22,10 +24,20 @@ class NotificacionesRepository {
       leidas.add('$tipo:$origenId');
     }
 
-    final alertasData = await _client
-        .from('alertas_oficiales')
-        .select('id, titulo, mensaje, created_at')
-        .order('created_at', ascending: false);
+    List alertasData;
+    bool alertaIncluyeCalles = true;
+    try {
+      alertasData = await _client
+          .from('alertas_oficiales')
+          .select('id, titulo, mensaje, created_at, aplica_todas_calles, calles_objetivo')
+          .order('created_at', ascending: false) as List;
+    } catch (_) {
+      alertaIncluyeCalles = false;
+      alertasData = await _client
+          .from('alertas_oficiales')
+          .select('id, titulo, mensaje, created_at')
+          .order('created_at', ascending: false) as List;
+    }
 
     final reportesData = await _client
         .from('reportes')
@@ -50,7 +62,15 @@ class NotificacionesRepository {
 
     final notificaciones = <NotificacionApp>[];
 
-    for (final a in alertasData as List) {
+    for (final a in alertasData) {
+      if (alertaIncluyeCalles &&
+          !_debeMostrarAlertaPorCalle(
+            alerta: a as Map<String, dynamic>,
+            calleUsuarioNormalizada: calleUsuarioNormalizada,
+          )) {
+        continue;
+      }
+
       final origenId = a['id'] as String;
       final tipo = TipoNotificacionApp.alertaOficial;
       notificaciones.add(
@@ -108,5 +128,46 @@ class NotificacionesRepository {
     for (final n in notificaciones.where((n) => !n.leida)) {
       await marcarLeida(n);
     }
+  }
+
+  Future<String?> _obtenerCalleUsuario(String userId) async {
+    try {
+      final perfil = await _client
+          .from('perfiles_usuarios')
+          .select('calle')
+          .eq('id', userId)
+          .maybeSingle();
+
+      return (perfil?['calle'] as String?)?.trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _debeMostrarAlertaPorCalle({
+    required Map<String, dynamic> alerta,
+    required String calleUsuarioNormalizada,
+  }) {
+    final aplicaTodas = alerta['aplica_todas_calles'] == true;
+    if (aplicaTodas) return true;
+
+    final callesRaw = alerta['calles_objetivo'];
+    if (callesRaw is! List) return true;
+
+    final callesObjetivo = callesRaw
+        .whereType<String>()
+        .map(_normalizarTexto)
+        .where((c) => c.isNotEmpty)
+        .toSet();
+
+    if (callesObjetivo.isEmpty) return true;
+    if (calleUsuarioNormalizada.isEmpty) return false;
+
+    return callesObjetivo.contains(calleUsuarioNormalizada);
+  }
+
+  String _normalizarTexto(String? value) {
+    if (value == null) return '';
+    return value.trim().toLowerCase();
   }
 }

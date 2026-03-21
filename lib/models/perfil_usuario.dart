@@ -6,6 +6,7 @@ class PerfilUsuario {
   final String? numeroContrato;
   final String? direccion;
   final String? colonia;
+  final String? calle;
   final String? email;
   final String telefono;
   final String? invitacionId;
@@ -19,6 +20,7 @@ class PerfilUsuario {
     this.numeroContrato,
     this.direccion,
     this.colonia,
+    this.calle,
     this.email,
     required this.telefono,
     this.invitacionId,
@@ -34,6 +36,7 @@ class PerfilUsuario {
       numeroContrato: json['numero_contrato'] as String?,
       direccion: json['direccion'] as String?,
       colonia: json['colonia'] as String?,
+      calle: json['calle'] as String?,
       email: json['email'] as String?,
       telefono: json['telefono'] as String,
       invitacionId: json['invitacion_id'] as String?,
@@ -50,6 +53,7 @@ class PerfilUsuario {
       'numero_contrato': numeroContrato,
       'direccion': direccion,
       'colonia': colonia,
+      'calle': calle,
       'email': email,
       'telefono': telefono,
       'invitacion_id': invitacionId,

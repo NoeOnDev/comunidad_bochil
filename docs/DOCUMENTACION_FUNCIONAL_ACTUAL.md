@@ -264,6 +264,7 @@ Hay 2 caminos de acceso:
 - Consolida notificaciones de dos origenes:
   - alertas oficiales
   - cambios de estado de mis reportes
+- Si una alerta oficial define calles objetivo, solo se muestra a usuarios cuya calle de perfil coincide.
 - Permite marcar notificaciones como leidas por usuario.
 - Se integra con push: al tocar notificacion remota sin reporte_id, abre este centro.
 
@@ -271,6 +272,9 @@ Hay 2 caminos de acceso:
 
 - alertas_oficiales
   - SELECT de alertas activas para fuente de notificaciones.
+  - Soporta segmentacion por calles con `aplica_todas_calles` y `calles_objetivo`.
+- perfiles_usuarios
+  - SELECT de `calle` del usuario para filtrar alertas por zona.
 - historial_estados
   - SELECT de cambios de estado para reportes del usuario.
 - reportes
@@ -286,6 +290,7 @@ Hay 2 caminos de acceso:
 - Registra token FCM por dispositivo y plataforma.
 - Recibe push en background y foreground.
 - En foreground muestra notificacion local real para mejorar UX.
+- Para alertas oficiales, permite envio segmentado por calle desde backend.
 - Al tocar una notificacion:
   - si incluye reporte_id, abre detalle de reporte.
   - si no incluye reporte_id, abre centro de notificaciones.
@@ -296,8 +301,10 @@ Hay 2 caminos de acceso:
   - SELECT/INSERT/UPDATE/DELETE de tokens propios.
 - historial_estados / alertas_oficiales
   - Origen funcional de eventos de notificacion.
+- perfiles_usuarios
+  - Fuente de calle para segmentacion de alertas por zona.
 - Supabase Edge Functions
-  - Funcion server-side para envio push via FCM v1.
+  - Funcion server-side para envio push via FCM v1 y filtros por calle en alertas oficiales.
 
 ## 2.11 Sincronizacion Offline y Cache
 

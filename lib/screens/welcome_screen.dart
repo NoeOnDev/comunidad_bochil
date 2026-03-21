@@ -40,7 +40,7 @@ class WelcomeScreen extends StatelessWidget {
               const SizedBox(height: 32),
 
               const Text(
-                'SAPAM Bochil',
+                'Comunidad Bochil',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -49,7 +49,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Sistema de Agua Potable\ny Alcantarillado Municipal',
+                'Aplicación comunitaria\npara reportes y participación ciudadana',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15,

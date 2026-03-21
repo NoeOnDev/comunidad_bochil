@@ -78,6 +78,9 @@ class AuthRepository {
     String? email,
   }) async {
     final userId = _client.auth.currentUser!.id;
+    final calle = (invitacion.calle?.trim().isNotEmpty ?? false)
+        ? invitacion.calle!.trim()
+        : _extraerCalleDesdeDireccion(invitacion.direccion);
 
     // 1. Insertar perfil del usuario (operación crítica)
     await _client.from('perfiles_usuarios').insert({
@@ -88,6 +91,7 @@ class AuthRepository {
       'numero_contrato': invitacion.numeroContrato,
       'direccion': invitacion.direccion,
       'colonia': invitacion.colonia,
+      'calle': calle,
       'email': email,
       'telefono': telefono,
       'invitacion_id': invitacion.id,
@@ -142,5 +146,18 @@ class AuthRepository {
   Future<void> cerrarSesion() async {
     await PushNotificationService.instance.limpiarTokenActual();
     await _client.auth.signOut();
+  }
+
+  String? _extraerCalleDesdeDireccion(String direccion) {
+    final limpia = direccion.trim();
+    if (limpia.isEmpty) return null;
+
+    final partes = limpia.split(',');
+    if (partes.isNotEmpty) {
+      final primera = partes.first.trim();
+      if (primera.isNotEmpty) return primera;
+    }
+
+    return null;
   }
 }

@@ -100,7 +100,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                   Text(
                     _procesando
                         ? 'Verificando código...'
-                        : 'Apunta la cámara al código QR\nde tu invitación SAPAM',
+                        : 'Apunta la cámara al código QR\nde tu invitación de Comunidad Bochil',
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),

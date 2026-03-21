@@ -48,6 +48,7 @@ class _PerfilContent extends ConsumerWidget {
         ref.watch(supabaseClientProvider).auth.currentUser?.phone ??
         'Sin teléfono';
     final colonia = perfil?.colonia ?? 'Sin colonia';
+    final calle = perfil?.calle ?? 'Sin calle';
     final contrato = perfil?.numeroContrato;
 
     return Column(
@@ -117,6 +118,12 @@ class _PerfilContent extends ConsumerWidget {
                   icon: Icons.location_on,
                   title: 'Colonia',
                   subtitle: colonia,
+                ),
+                const Divider(height: 1, indent: 56),
+                _InfoListTile(
+                  icon: Icons.route,
+                  title: 'Calle',
+                  subtitle: calle,
                 ),
                 if (contrato != null) ...[
                   const Divider(height: 1, indent: 56),

@@ -32,17 +32,18 @@ Future<void> main() async {
 
   await CachedTileLayerBuilder.init();
 
-  runApp(const ProviderScope(child: SapamApp()));
+  runApp(const ProviderScope(child: ComunidadBochilApp()));
 }
 
-class SapamApp extends ConsumerStatefulWidget {
-  const SapamApp({super.key});
+class ComunidadBochilApp extends ConsumerStatefulWidget {
+  const ComunidadBochilApp({super.key});
 
   @override
-  ConsumerState<SapamApp> createState() => _SapamAppState();
+  ConsumerState<ComunidadBochilApp> createState() => _ComunidadBochilAppState();
 }
 
-class _SapamAppState extends ConsumerState<SapamApp> with WidgetsBindingObserver {
+class _ComunidadBochilAppState extends ConsumerState<ComunidadBochilApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -70,7 +71,7 @@ class _SapamAppState extends ConsumerState<SapamApp> with WidgetsBindingObserver
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
-      title: 'SAPAM Bochil',
+      title: 'Comunidad Bochil',
       theme: appTheme(),
       debugShowCheckedModeBanner: false,
       routerConfig: router,

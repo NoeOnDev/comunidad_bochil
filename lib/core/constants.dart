@@ -4,11 +4,11 @@ import 'package:latlong2/latlong.dart';
 /// Coordenadas de Bochil, Chiapas (centro del municipio).
 final LatLng bochilCenter = LatLng(16.995714, -92.893498);
 
-/// Colores institucionales SAPAM.
+/// Paleta institucional de Comunidad Bochil.
 class AppColors {
   AppColors._();
 
-  static const Color primary = Color(0xFF1565C0); // Azul SAPAM
+  static const Color primary = Color(0xFF1565C0); // Azul principal
   static const Color primaryDark = Color(0xFF0D47A1);
   static const Color accent = Color(0xFF26C6DA); // Cyan agua
   static const Color background = Color(0xFFF5F7FA);
