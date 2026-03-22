@@ -40,6 +40,20 @@ final authStateProvider = StreamProvider<AuthState>(
   (ref) => ref.watch(authRepositoryProvider).authStateChanges,
 );
 
+/// Usuario de Auth sincronizado desde servidor.
+/// Se usa para reflejar cambios de email/magic link en el primer retorno.
+final authUserServerProvider = FutureProvider<User?>((ref) async {
+  ref.watch(authStateProvider);
+  final client = ref.watch(supabaseClientProvider);
+
+  try {
+    final response = await client.auth.getUser();
+    return response.user ?? client.auth.currentUser;
+  } catch (_) {
+    return client.auth.currentUser;
+  }
+});
+
 // ─── Invitación QR en proceso de registro ────────────────────────────────────
 final invitacionEnProcesoProvider = StateProvider<InvitacionQr?>((ref) => null);
 

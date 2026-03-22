@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/env.dart';
 import '../models/invitacion_qr.dart';
 import '../models/perfil_usuario.dart';
 import '../services/push_notification_service.dart';
@@ -120,7 +121,33 @@ class AuthRepository {
 
   /// Envía un enlace mágico de acceso al correo electrónico.
   Future<void> enviarMagicLink(String email) async {
-    await _client.auth.signInWithOtp(email: email);
+    await _client.auth.signInWithOtp(
+      email: email,
+      emailRedirectTo: Env.magicLinkRedirectUrl,
+      shouldCreateUser: false,
+    );
+  }
+
+  /// Vincula un correo al usuario actual para habilitar recuperación por magic link.
+  Future<void> vincularCorreo(String email) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw const AuthException('No hay sesión activa para vincular correo.');
+    }
+
+    await _client.auth.updateUser(
+      UserAttributes(email: email),
+      emailRedirectTo: Env.magicLinkRedirectUrl,
+    );
+
+    // Este update puede fallar por RLS según la configuración actual; no bloquea
+    // la vinculación de auth.users, que es la requerida para magic link.
+    try {
+      await _client
+          .from('perfiles_usuarios')
+          .update({'email': email})
+          .eq('id', userId);
+    } catch (_) {}
   }
 
   /// Obtiene el perfil del usuario actual.
@@ -139,6 +166,29 @@ class AuthRepository {
       return PerfilUsuario.fromJson(response);
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Verifica que la sesión local siga siendo válida en Supabase y
+  /// que exista perfil asociado en `perfiles_usuarios`.
+  Future<bool> sesionSigueValida() async {
+    final session = _client.auth.currentSession;
+    if (session == null) return false;
+
+    try {
+      final authUser = await _client.auth.getUser();
+      final userId = authUser.user?.id;
+      if (userId == null) return false;
+
+      final perfil = await _client
+          .from('perfiles_usuarios')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle();
+
+      return perfil != null;
+    } catch (_) {
+      return false;
     }
   }
 

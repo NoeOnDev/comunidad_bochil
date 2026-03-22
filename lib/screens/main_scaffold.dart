@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/constants.dart';
+import '../providers/providers.dart';
 import '../services/push_notification_service.dart';
 import 'home_screen.dart';
 import 'feed_comunitario_screen.dart';
@@ -15,7 +16,8 @@ class MainScaffold extends ConsumerStatefulWidget {
   ConsumerState<MainScaffold> createState() => _MainScaffoldState();
 }
 
-class _MainScaffoldState extends ConsumerState<MainScaffold> {
+class _MainScaffoldState extends ConsumerState<MainScaffold>
+  with WidgetsBindingObserver {
   int _currentIndex = 0;
 
   final List<Widget> _screens = const [
@@ -28,7 +30,22 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _iniciarPush();
+    _validarSesionActiva();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _validarSesionActiva();
+    }
   }
 
   Future<void> _iniciarPush() async {
@@ -44,6 +61,29 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
         context.push('/notificaciones');
       },
     );
+  }
+
+  Future<void> _validarSesionActiva() async {
+    final authRepo = ref.read(authRepositoryProvider);
+    final valida = await authRepo.sesionSigueValida();
+
+    if (valida) {
+      ref.invalidate(authUserServerProvider);
+      ref.invalidate(perfilUsuarioProvider);
+      return;
+    }
+
+    if (!mounted) return;
+
+    await authRepo.cerrarSesion();
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Tu sesión expiró o la cuenta ya no existe. Inicia sesión nuevamente.'),
+      ),
+    );
+    context.go('/welcome');
   }
 
   @override

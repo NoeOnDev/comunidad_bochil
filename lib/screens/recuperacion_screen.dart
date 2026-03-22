@@ -33,7 +33,9 @@ class _RecuperacionScreenState extends ConsumerState<RecuperacionScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Enlace enviado. Revisa tu correo para iniciar sesión.'),
+          content: Text(
+            'Enlace enviado si el correo ya está vinculado a tu cuenta. Revisa tu bandeja.',
+          ),
           backgroundColor: Colors.green,
         ),
       );

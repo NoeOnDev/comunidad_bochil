@@ -12,6 +12,9 @@ class PerfilScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Fuerza rebuild de esta pantalla cuando cambia el estado de auth
+    // (por ejemplo al volver desde email_change / magic link).
+    ref.watch(authStateProvider);
     final perfilAsync = ref.watch(perfilUsuarioProvider);
     final conectado = ref.watch(conectividadProvider).valueOrNull ?? true;
 
@@ -41,19 +44,35 @@ class _PerfilContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authUserAsync = ref.watch(authUserServerProvider);
+    final authUser =
+        authUserAsync.valueOrNull ?? ref.watch(supabaseClientProvider).auth.currentUser;
     final nombre = perfil?.nombreCompleto ?? 'Usuario';
     final inicial = nombre.isNotEmpty ? nombre[0].toUpperCase() : 'U';
     final telefono =
         perfil?.telefono ??
-        ref.watch(supabaseClientProvider).auth.currentUser?.phone ??
+        authUser?.phone ??
         'Sin teléfono';
+    final email =
+      perfil?.email ??
+      authUser?.email ??
+      'Sin correo vinculado';
+    final tieneCorreoVinculado = (authUser?.email ?? '').trim().isNotEmpty;
+    final correoConfirmado = authUser?.emailConfirmedAt != null;
+    final correoPendienteConfirmacion =
+        tieneCorreoVinculado && !correoConfirmado;
+    final correoActual = (authUser?.email ?? '').trim();
     final colonia = perfil?.colonia ?? 'Sin colonia';
     final calle = perfil?.calle ?? 'Sin calle';
     final contrato = perfil?.numeroContrato;
 
-    return Column(
-      children: [
-        const SizedBox(height: 32),
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).padding.bottom + 24,
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 32),
 
         // Avatar con inicial
         CircleAvatar(
@@ -115,6 +134,45 @@ class _PerfilContent extends ConsumerWidget {
                 ),
                 const Divider(height: 1, indent: 56),
                 _InfoListTile(
+                  icon: Icons.alternate_email,
+                  title: 'Correo',
+                  subtitle: email,
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 56, right: 16, bottom: 10),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: !tieneCorreoVinculado
+                            ? Colors.orange.withValues(alpha: 0.12)
+                            : (correoConfirmado
+                                ? Colors.green.withValues(alpha: 0.12)
+                                : Colors.amber.withValues(alpha: 0.15)),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        !tieneCorreoVinculado
+                            ? 'Sin correo para recuperación'
+                            : (correoConfirmado
+                                ? 'Correo vinculado y confirmado'
+                                : 'Correo vinculado, pendiente de confirmación'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: !tieneCorreoVinculado
+                              ? Colors.orange.shade800
+                              : (correoConfirmado
+                                  ? Colors.green.shade700
+                                  : Colors.amber.shade900),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1, indent: 56),
+                _InfoListTile(
                   icon: Icons.location_on,
                   title: 'Colonia',
                   subtitle: colonia,
@@ -138,32 +196,79 @@ class _PerfilContent extends ConsumerWidget {
           ),
         ),
 
-        const Spacer(),
+          const SizedBox(height: 20),
 
-        // Botón cerrar sesión
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _cerrarSesion(context, ref),
-              icon: const Icon(Icons.logout, color: AppColors.error),
-              label: const Text(
-                'Cerrar Sesión',
-                style: TextStyle(color: AppColors.error),
-              ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                side: const BorderSide(color: AppColors.error),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: correoPendienteConfirmacion
+                    ? null
+                    : () => _vincularCorreo(context, ref),
+                icon: const Icon(Icons.mark_email_read_outlined),
+                label: Text(
+                  correoPendienteConfirmacion
+                      ? 'Confirmación de correo pendiente'
+                      : (tieneCorreoVinculado
+                      ? 'Actualizar Correo de Recuperación'
+                      : 'Vincular Correo para Recuperación'),
                 ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 32),
-      ],
+          if (correoPendienteConfirmacion)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Text(
+                'Revisa tu bandeja y confirma el correo antes de actualizarlo o usar recuperación por email.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          if (correoActual.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Text(
+                'Al actualizar el correo, por seguridad debes confirmar el enlace en el correo actual y en el nuevo.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.orange.shade800,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
+
+          // Botón cerrar sesión
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _cerrarSesion(context, ref),
+                icon: const Icon(Icons.logout, color: AppColors.error),
+                label: const Text(
+                  'Cerrar Sesión',
+                  style: TextStyle(color: AppColors.error),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: const BorderSide(color: AppColors.error),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
     );
   }
 
@@ -192,6 +297,120 @@ class _PerfilContent extends ConsumerWidget {
     if (confirmar == true && context.mounted) {
       await ref.read(authRepositoryProvider).cerrarSesion();
       if (context.mounted) context.go('/welcome');
+    }
+  }
+
+  Future<void> _vincularCorreo(BuildContext context, WidgetRef ref) async {
+    String emailInput = '';
+    try {
+      final email = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Vincular correo'),
+          content: TextField(
+            keyboardType: TextInputType.emailAddress,
+            onChanged: (value) => emailInput = value,
+            decoration: const InputDecoration(
+              labelText: 'Correo electrónico',
+              hintText: 'usuario@correo.com',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(ctx, emailInput.trim().toLowerCase()),
+              child: const Text('Vincular'),
+            ),
+          ],
+        ),
+      );
+
+      if (email == null || email.isEmpty || !context.mounted) return;
+
+      final regex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+      if (!regex.hasMatch(email)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Correo no válido.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      final authUserResponse = await ref.read(supabaseClientProvider).auth.getUser();
+      final authUser = authUserResponse.user;
+      final correoActual = (authUser?.email ?? '').trim().toLowerCase();
+      final correoConfirmado = authUser?.emailConfirmedAt != null;
+      final tieneCorreoPrevio = correoActual.isNotEmpty;
+
+      if (correoActual.isNotEmpty && correoActual == email) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              correoConfirmado
+                  ? 'Ese correo ya está vinculado y confirmado.'
+                  : 'Ese correo ya está vinculado. Revisa tu bandeja para confirmar el enlace pendiente.',
+            ),
+            backgroundColor: correoConfirmado ? Colors.blueGrey : Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      if (tieneCorreoPrevio) {
+        final confirmar = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Confirmar actualización de correo'),
+            content: const Text(
+              'Por seguridad recibirás un enlace en tu correo actual y otro en el nuevo. Debes confirmar ambos para completar el cambio.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Continuar'),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmar != true || !context.mounted) return;
+      }
+
+      await ref.read(authRepositoryProvider).vincularCorreo(email);
+      ref.invalidate(authUserServerProvider);
+      ref.invalidate(perfilUsuarioProvider);
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tieneCorreoPrevio
+                ? 'Solicitud enviada. Revisa tu correo actual y el nuevo para confirmar ambos enlaces.'
+                : 'Correo vinculado. Revisa tu bandeja para confirmar el enlace de verificación.',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo vincular el correo: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 }
