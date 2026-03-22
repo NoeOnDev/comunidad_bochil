@@ -54,8 +54,8 @@ class _PerfilContent extends ConsumerWidget {
         authUser?.phone ??
         'Sin teléfono';
     final email =
-      perfil?.email ??
       authUser?.email ??
+      perfil?.email ??
       'Sin correo vinculado';
     final tieneCorreoVinculado = (authUser?.email ?? '').trim().isNotEmpty;
     final correoConfirmado = authUser?.emailConfirmedAt != null;

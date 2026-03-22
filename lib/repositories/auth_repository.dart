@@ -130,8 +130,7 @@ class AuthRepository {
 
   /// Vincula un correo al usuario actual para habilitar recuperación por magic link.
   Future<void> vincularCorreo(String email) async {
-    final userId = _client.auth.currentUser?.id;
-    if (userId == null) {
+    if (_client.auth.currentUser == null) {
       throw const AuthException('No hay sesión activa para vincular correo.');
     }
 
@@ -139,15 +138,6 @@ class AuthRepository {
       UserAttributes(email: email),
       emailRedirectTo: Env.magicLinkRedirectUrl,
     );
-
-    // Este update puede fallar por RLS según la configuración actual; no bloquea
-    // la vinculación de auth.users, que es la requerida para magic link.
-    try {
-      await _client
-          .from('perfiles_usuarios')
-          .update({'email': email})
-          .eq('id', userId);
-    } catch (_) {}
   }
 
   /// Obtiene el perfil del usuario actual.
@@ -163,9 +153,30 @@ class AuthRepository {
           .maybeSingle();
 
       if (response == null) return null;
-      return PerfilUsuario.fromJson(response);
+      final perfil = PerfilUsuario.fromJson(response);
+      await _sincronizarEmailPerfilConAuth(userId: userId, perfil: perfil);
+      return perfil;
     } catch (_) {
       return null;
+    }
+  }
+
+  Future<void> _sincronizarEmailPerfilConAuth({
+    required String userId,
+    required PerfilUsuario perfil,
+  }) async {
+    final authEmail = _client.auth.currentUser?.email?.trim();
+    final perfilEmail = perfil.email?.trim();
+    if (authEmail == null || authEmail.isEmpty) return;
+    if (perfilEmail == authEmail) return;
+
+    try {
+      await _client
+          .from('perfiles_usuarios')
+          .update({'email': authEmail})
+          .eq('id', userId);
+    } catch (_) {
+      // Sin impacto funcional: auth.users es la fuente de verdad del login por email.
     }
   }
 
