@@ -348,6 +348,8 @@ class _PerfilContent extends ConsumerWidget {
       final correoConfirmado = authUser?.emailConfirmedAt != null;
       final tieneCorreoPrevio = correoActual.isNotEmpty;
 
+      if (!context.mounted) return;
+
       if (correoActual.isNotEmpty && correoActual == email) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
