@@ -5,6 +5,7 @@ class InvitacionQr {
   final String nombreTitular;
   final String direccion;
   final String colonia;
+  final String? calleId;
   final String? calle;
   final bool usado;
   final String? usadoPor;
@@ -18,6 +19,7 @@ class InvitacionQr {
     required this.nombreTitular,
     required this.direccion,
     required this.colonia,
+    this.calleId,
     this.calle,
     required this.usado,
     this.usadoPor,
@@ -33,7 +35,8 @@ class InvitacionQr {
       nombreTitular: json['nombre_titular'] as String,
       direccion: json['direccion'] as String,
       colonia: json['colonia'] as String,
-        calle: json['calle'] as String?,
+      calleId: json['calle_id'] as String?,
+      calle: json['calle'] as String?,
       usado: json['usado'] as bool,
       usadoPor: json['usado_por'] as String?,
       fechaUso: json['fecha_uso'] != null
@@ -51,6 +54,7 @@ class InvitacionQr {
       'nombre_titular': nombreTitular,
       'direccion': direccion,
       'colonia': colonia,
+      'calle_id': calleId,
       'calle': calle,
       'usado': usado,
       'usado_por': usadoPor,

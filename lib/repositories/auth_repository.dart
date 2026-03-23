@@ -92,6 +92,7 @@ class AuthRepository {
       'numero_contrato': invitacion.numeroContrato,
       'direccion': invitacion.direccion,
       'colonia': invitacion.colonia,
+      'calle_id': invitacion.calleId,
       'calle': calle,
       'email': email,
       'telefono': telefono,
