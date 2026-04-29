@@ -119,13 +119,17 @@ final reportesFiltradosProvider = Provider<AsyncValue<List<Reporte>>>((ref) {
   return reportesAsync.whenData(filtros.aplicar);
 });
 
+final misReportesAsignadosProvider = FutureProvider<List<Reporte>>((ref) async {
+  return ref.watch(reportesRepositoryProvider).obtenerReportesAsignados();
+});
+
 // ─── Historial de estados por reporte (SLA / timeline) ─────────────────────
 final historialEstadosProvider =
     FutureProvider.family<List<HistorialEstado>, String>((ref, reporteId) {
-  return ref
-      .watch(reportesRepositoryProvider)
-      .obtenerHistorialEstados(reporteId);
-});
+      return ref
+          .watch(reportesRepositoryProvider)
+          .obtenerHistorialEstados(reporteId);
+    });
 
 // ─── Alertas Oficiales ───────────────────────────────────────────────────────
 final alertasProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
@@ -138,15 +142,17 @@ final temasForoProvider = FutureProvider<List<TemaForo>>((ref) async {
 
 final comentariosTemaProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((ref, temaId) {
-  return ref.watch(foroRepositoryProvider).obtenerComentariosTema(temaId);
-});
+      return ref.watch(foroRepositoryProvider).obtenerComentariosTema(temaId);
+    });
 
 final notificacionesProvider = FutureProvider<List<NotificacionApp>>((ref) {
   return ref.watch(notificacionesRepositoryProvider).obtenerNotificaciones();
 });
 
-final reporteDetallePorIdProvider =
-    FutureProvider.family<Reporte?, String>((ref, reporteId) {
+final reporteDetallePorIdProvider = FutureProvider.family<Reporte?, String>((
+  ref,
+  reporteId,
+) {
   return ref
       .watch(reportesRepositoryProvider)
       .obtenerReporteEnriquecidoPorId(reporteId);

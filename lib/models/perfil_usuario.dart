@@ -61,3 +61,13 @@ class PerfilUsuario {
     };
   }
 }
+
+extension PerfilUsuarioRolX on PerfilUsuario {
+  bool get esCiudadano => rol == 'ciudadano';
+
+  bool get esCoordinador => rol == 'coordinador';
+
+  bool get esAdmin => rol == 'admin';
+
+  bool get esTecnico => rol == 'tecnico';
+}

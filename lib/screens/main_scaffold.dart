@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/constants.dart';
+import '../models/perfil_usuario.dart';
 import '../providers/providers.dart';
 import '../services/push_notification_service.dart';
+import '../widgets/offline_state_widget.dart';
+import 'mis_reportes_asignados_screen.dart';
 import 'home_screen.dart';
 import 'feed_comunitario_screen.dart';
 import 'foro_screen.dart';
@@ -17,15 +20,61 @@ class MainScaffold extends ConsumerStatefulWidget {
 }
 
 class _MainScaffoldState extends ConsumerState<MainScaffold>
-  with WidgetsBindingObserver {
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    FeedComunitarioScreen(),
-    ForoScreen(),
-    PerfilScreen(),
-  ];
+  List<Widget> _screens({required bool esTecnico}) {
+    if (esTecnico) {
+      return const [MisReportesAsignadosScreen(), PerfilScreen()];
+    }
+
+    return const [
+      HomeScreen(),
+      FeedComunitarioScreen(),
+      ForoScreen(),
+      PerfilScreen(),
+    ];
+  }
+
+  List<NavigationDestination> _destinations({required bool esTecnico}) {
+    if (esTecnico) {
+      return const [
+        NavigationDestination(
+          icon: Icon(Icons.assignment_outlined),
+          selectedIcon: Icon(Icons.assignment, color: AppColors.primary),
+          label: 'Asignados',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.person_outline),
+          selectedIcon: Icon(Icons.person, color: AppColors.primary),
+          label: 'Perfil',
+        ),
+      ];
+    }
+
+    return const [
+      NavigationDestination(
+        icon: Icon(Icons.map_outlined),
+        selectedIcon: Icon(Icons.map, color: AppColors.primary),
+        label: 'Inicio',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.forum_outlined),
+        selectedIcon: Icon(Icons.forum, color: AppColors.primary),
+        label: 'Comunidad',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.groups_outlined),
+        selectedIcon: Icon(Icons.groups, color: AppColors.primary),
+        label: 'Foro',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.person_outline),
+        selectedIcon: Icon(Icons.person, color: AppColors.primary),
+        label: 'Perfil',
+      ),
+    ];
+  }
 
   @override
   void initState() {
@@ -80,7 +129,9 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Tu sesión expiró o la cuenta ya no existe. Inicia sesión nuevamente.'),
+        content: Text(
+          'Tu sesión expiró o la cuenta ya no existe. Inicia sesión nuevamente.',
+        ),
       ),
     );
     context.go('/welcome');
@@ -88,41 +139,37 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+    final perfilAsync = ref.watch(perfilUsuarioProvider);
+
+    return perfilAsync.when(
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (error, _) => Scaffold(
+        body: OfflineStateWidget(
+          onReintentar: () => ref.invalidate(perfilUsuarioProvider),
+        ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
-        },
-        backgroundColor: AppColors.surface,
-        indicatorColor: AppColors.primary.withValues(alpha: 0.15),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map, color: AppColors.primary),
-            label: 'Inicio',
+      data: (perfil) {
+        final esTecnico = perfil?.esTecnico ?? false;
+        final screens = _screens(esTecnico: esTecnico);
+        final destinations = _destinations(esTecnico: esTecnico);
+        final selectedIndex = _currentIndex >= screens.length
+            ? 0
+            : _currentIndex;
+
+        return Scaffold(
+          body: IndexedStack(index: selectedIndex, children: screens),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: selectedIndex,
+            onDestinationSelected: (index) {
+              setState(() => _currentIndex = index);
+            },
+            backgroundColor: AppColors.surface,
+            indicatorColor: AppColors.primary.withValues(alpha: 0.15),
+            destinations: destinations,
           ),
-          NavigationDestination(
-            icon: Icon(Icons.forum_outlined),
-            selectedIcon: Icon(Icons.forum, color: AppColors.primary),
-            label: 'Comunidad',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.groups_outlined),
-            selectedIcon: Icon(Icons.groups, color: AppColors.primary),
-            label: 'Foro',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person, color: AppColors.primary),
-            label: 'Perfil',
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

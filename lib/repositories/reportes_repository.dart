@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:latlong2/latlong.dart';
+import '../core/constants.dart';
 import '../models/reporte.dart';
 import '../models/historial_estado.dart';
 
@@ -15,7 +16,8 @@ class ReportesRepository {
       'created_at, updated_at';
 
   Future<Map<String, String>> _obtenerNombresPublicos(
-      List<String> usuariosIds) async {
+    List<String> usuariosIds,
+  ) async {
     final idsUnicos = usuariosIds.toSet().toList();
     if (idsUnicos.isEmpty) return {};
 
@@ -55,7 +57,7 @@ class ReportesRepository {
     // 1. Reportes públicos
     final reportesData = await _client
         .from('reportes')
-      .select(_selectColumns)
+        .select(_selectColumns)
         .eq('es_publico', true)
         .order('created_at', ascending: false);
 
@@ -97,8 +99,8 @@ class ReportesRepository {
     return lista.map((raw) {
       final json = Map<String, dynamic>.from(raw as Map);
       final id = json['id'] as String;
-        final autorId = json['usuario_id'] as String;
-        json['nombre_autor'] = nombresAutores[autorId];
+      final autorId = json['usuario_id'] as String;
+      json['nombre_autor'] = nombresAutores[autorId];
       json['conteo_votos'] = conteoVotos[id] ?? 0;
       json['usuario_ha_votado'] = misVotos.contains(id);
       json['conteo_comentarios'] = conteoComentarios[id] ?? 0;
@@ -111,7 +113,9 @@ class ReportesRepository {
     final fileName =
         '${_client.auth.currentUser!.id}/${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-    await _client.storage.from('evidencia_reportes').upload(
+    await _client.storage
+        .from('evidencia_reportes')
+        .upload(
           fileName,
           archivo,
           fileOptions: const FileOptions(contentType: 'image/jpeg'),
@@ -204,7 +208,8 @@ class ReportesRepository {
 
   /// Obtiene los comentarios de un reporte con datos del autor.
   Future<List<Map<String, dynamic>>> obtenerComentarios(
-      String reporteId) async {
+    String reporteId,
+  ) async {
     final data = await _client
         .from('comentarios_reportes')
         .select('id, comentario, created_at, usuario_id')
@@ -223,8 +228,9 @@ class ReportesRepository {
       return {
         ...c,
         'autor': {
-          'nombre_completo':
-              autorId != null ? (nombresAutores[autorId] ?? 'Usuario') : 'Usuario',
+          'nombre_completo': autorId != null
+              ? (nombresAutores[autorId] ?? 'Usuario')
+              : 'Usuario',
         },
       };
     }).toList();
@@ -237,6 +243,65 @@ class ReportesRepository {
       'usuario_id': _client.auth.currentUser!.id,
       'comentario': texto,
     });
+  }
+
+  Future<void> actualizarEstadoOperativo({
+    required String reporteId,
+    required EstadoReporte estadoActual,
+    required EstadoReporte estadoNuevo,
+    String? comentario,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('Debes iniciar sesión para actualizar el reporte.');
+    }
+
+    final perfil = await _client
+        .from('perfiles_usuarios')
+        .select('rol')
+        .eq('id', userId)
+        .maybeSingle();
+
+    final reporte = await _client
+        .from('reportes')
+        .select('asignado_a')
+        .eq('id', reporteId)
+        .maybeSingle();
+
+    if (reporte == null) {
+      throw StateError('No se encontró el reporte que intentas actualizar.');
+    }
+
+    final rol = perfil?['rol'] as String?;
+    final asignadoA = reporte['asignado_a'] as String?;
+    final puedeEditar =
+        asignadoA == userId || rol == 'admin' || rol == 'coordinador';
+
+    if (!puedeEditar) {
+      throw StateError('No tienes permisos para actualizar este reporte.');
+    }
+
+    if (estadoActual == estadoNuevo) {
+      throw StateError('Selecciona un estado distinto para continuar.');
+    }
+
+    await _client.from('historial_estados').insert({
+      'reporte_id': reporteId,
+      'estado_anterior': estadoActual.value,
+      'estado_nuevo': estadoNuevo.value,
+      'cambiado_por': userId,
+      'comentario': (comentario != null && comentario.trim().isNotEmpty)
+          ? comentario.trim()
+          : null,
+    });
+
+    await _client
+        .from('reportes')
+        .update({
+          'estado': estadoNuevo.value,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', reporteId);
   }
 
   // ─── Alertas Oficiales ─────────────────────────────────────────────────────
@@ -252,7 +317,9 @@ class ReportesRepository {
   }
 
   /// Obtiene el historial cronológico de cambios de estado de un reporte.
-  Future<List<HistorialEstado>> obtenerHistorialEstados(String reporteId) async {
+  Future<List<HistorialEstado>> obtenerHistorialEstados(
+    String reporteId,
+  ) async {
     final data = await _client
         .from('historial_estados')
         .select(
@@ -306,6 +373,60 @@ class ReportesRepository {
     return Reporte.fromJson(json);
   }
 
+  /// Obtiene los reportes asignados al usuario autenticado.
+  Future<List<Reporte>> obtenerReportesAsignados() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return [];
+
+    final reportesData = await _client
+        .from('reportes')
+        .select(_selectColumns)
+        .eq('asignado_a', userId)
+        .order('updated_at', ascending: false);
+
+    final lista = reportesData as List;
+    if (lista.isEmpty) return [];
+
+    final ids = lista.map((r) => r['id'] as String).toList();
+    final autorIds = lista.map((r) => r['usuario_id'] as String).toList();
+    final nombresAutores = await _obtenerNombresPublicos(autorIds);
+
+    final votosData = await _client
+        .from('votos_reportes')
+        .select('reporte_id, usuario_id')
+        .inFilter('reporte_id', ids);
+
+    final Map<String, int> conteoVotos = {};
+    final Set<String> misVotos = {};
+    for (final v in votosData as List) {
+      final rid = v['reporte_id'] as String;
+      conteoVotos[rid] = (conteoVotos[rid] ?? 0) + 1;
+      if (v['usuario_id'] == userId) misVotos.add(rid);
+    }
+
+    final comentariosData = await _client
+        .from('comentarios_reportes')
+        .select('reporte_id')
+        .inFilter('reporte_id', ids);
+
+    final Map<String, int> conteoComentarios = {};
+    for (final c in comentariosData as List) {
+      final rid = c['reporte_id'] as String;
+      conteoComentarios[rid] = (conteoComentarios[rid] ?? 0) + 1;
+    }
+
+    return lista.map((raw) {
+      final json = Map<String, dynamic>.from(raw as Map);
+      final id = json['id'] as String;
+      final autorId = json['usuario_id'] as String;
+      json['nombre_autor'] = nombresAutores[autorId];
+      json['conteo_votos'] = conteoVotos[id] ?? 0;
+      json['usuario_ha_votado'] = misVotos.contains(id);
+      json['conteo_comentarios'] = conteoComentarios[id] ?? 0;
+      return Reporte.fromJson(json);
+    }).toList();
+  }
+
   // ─── Todos los reportes enriquecidos (para tabs Mi Colonia / Mis Reportes) ─
 
   /// Obtiene TODOS los reportes enriquecidos con autor, votos y comentarios.
@@ -315,7 +436,7 @@ class ReportesRepository {
 
     final reportesData = await _client
         .from('reportes')
-      .select(_selectColumns)
+        .select(_selectColumns)
         .order('created_at', ascending: false);
 
     final lista = reportesData as List;
@@ -354,8 +475,8 @@ class ReportesRepository {
     return lista.map((raw) {
       final json = Map<String, dynamic>.from(raw as Map);
       final id = json['id'] as String;
-        final autorId = json['usuario_id'] as String;
-        json['nombre_autor'] = nombresAutores[autorId];
+      final autorId = json['usuario_id'] as String;
+      json['nombre_autor'] = nombresAutores[autorId];
       json['conteo_votos'] = conteoVotos[id] ?? 0;
       json['usuario_ha_votado'] = misVotos.contains(id);
       json['conteo_comentarios'] = conteoComentarios[id] ?? 0;

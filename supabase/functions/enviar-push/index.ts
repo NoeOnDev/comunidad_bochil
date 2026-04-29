@@ -40,6 +40,10 @@ Deno.serve(async (req) => {
       return await handleHistorialEstados(record)
     }
 
+    if (table === 'reportes') {
+      return await handleAsignacionReporte(record, payload.old_record ?? {})
+    }
+
     if (table === 'alertas_oficiales') {
       return await handleAlertas(record)
     }
@@ -94,6 +98,61 @@ async function handleHistorialEstados(record: Record<string, unknown>) {
 
   const sent = results.filter((r) => r.ok).length
   return json({ ok: true, sent, total: tokens.length, table: 'historial_estados' })
+}
+
+async function handleAsignacionReporte(
+  record: Record<string, unknown>,
+  oldRecord: Record<string, unknown>,
+) {
+  const reporteId = String(record.id ?? '')
+  const tecnicoId = String(record.asignado_a ?? '')
+  const tecnicoAnteriorId = String(oldRecord.asignado_a ?? '')
+
+  if (!reporteId || !tecnicoId) {
+    return json({ ok: true, sent: 0, reason: 'Missing reporte_id or assigned technician' })
+  }
+
+  if (tecnicoId === tecnicoAnteriorId) {
+    return json({ ok: true, sent: 0, reason: 'Assigned technician did not change' })
+  }
+
+  const { data: reporte, error: reporteError } = await supabase
+    .from('reportes')
+    .select('id, titulo')
+    .eq('id', reporteId)
+    .maybeSingle()
+
+  if (reporteError || !reporte) {
+    return json({ ok: false, error: `Reporte not found: ${reporteError?.message ?? 'unknown'}` }, 404)
+  }
+
+  const { data: tokens, error: tokenError } = await supabase
+    .from('device_tokens')
+    .select('token')
+    .eq('usuario_id', tecnicoId)
+
+  if (tokenError) {
+    return json({ ok: false, error: tokenError.message }, 500)
+  }
+
+  if (!tokens || tokens.length === 0) {
+    return json({ ok: true, sent: 0, reason: 'No device tokens for technician' })
+  }
+
+  const uniqueTokens = [...new Set(tokens.map((t) => String(t.token)))]
+  const title = 'Nuevo reporte asignado'
+  const body = `Se te asigno el reporte "${reporte.titulo}".`
+
+  const results = await Promise.all(
+    uniqueTokens.map((token) => sendFcmV1(token, title, body, {
+      tipo: 'reporte_asignado',
+      reporte_id: reporteId,
+      tecnico_id: tecnicoId,
+    })),
+  )
+
+  const sent = results.filter((r) => r.ok).length
+  return json({ ok: true, sent, total: uniqueTokens.length, table: 'reportes' })
 }
 
 async function handleAlertas(record: Record<string, unknown>) {

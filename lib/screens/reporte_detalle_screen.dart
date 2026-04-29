@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/constants.dart';
 import '../core/cached_tile_layer.dart';
+import '../models/perfil_usuario.dart';
 import '../models/reporte.dart';
 import '../providers/providers.dart';
 import '../widgets/comentarios_bottom_sheet.dart';
@@ -28,6 +29,7 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
   late int _conteoVotos;
   late EstadoReporte _estadoActual;
   late DateTime _updatedAtActual;
+  bool _actualizandoEstado = false;
   StreamSubscription<List<Map<String, dynamic>>>? _votosSub;
   StreamSubscription<List<Map<String, dynamic>>>? _historialSub;
   StreamSubscription<List<Map<String, dynamic>>>? _reporteSub;
@@ -169,14 +171,17 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
         _conteoVotos += _votado ? 1 : -1;
       });
       if (mounted) {
-        final esRed = e is SocketException ||
+        final esRed =
+            e is SocketException ||
             e.toString().contains('SocketException') ||
             e.toString().contains('Failed host lookup');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(esRed
-                ? 'Sin conexión. No se pudo registrar tu voto.'
-                : 'Error al votar: $e'),
+            content: Text(
+              esRed
+                  ? 'Sin conexión. No se pudo registrar tu voto.'
+                  : 'Error al votar: $e',
+            ),
             backgroundColor: AppColors.error,
           ),
         );
@@ -187,7 +192,70 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
   bool get _puedeEliminar {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     return reporte.usuarioId == userId &&
-      _estadoActual == EstadoReporte.pendiente;
+        _estadoActual == EstadoReporte.pendiente;
+  }
+
+  bool _puedeGestionarOperativamente(PerfilUsuario? perfil) {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (perfil == null || userId == null) return false;
+
+    if (perfil.esAdmin || perfil.esCoordinador) {
+      return true;
+    }
+
+    return perfil.esTecnico && reporte.asignadoA == userId;
+  }
+
+  Future<void> _cambiarEstadoOperativo(PerfilUsuario perfil) async {
+    final resultado = await showDialog<_CambioEstadoResultado>(
+      context: context,
+      builder: (ctx) => _CambiarEstadoDialog(estadoActual: _estadoActual),
+    );
+
+    if (resultado == null || !mounted) return;
+
+    setState(() => _actualizandoEstado = true);
+
+    try {
+      await ref
+          .read(reportesRepositoryProvider)
+          .actualizarEstadoOperativo(
+            reporteId: reporte.id,
+            estadoActual: _estadoActual,
+            estadoNuevo: resultado.estadoNuevo,
+            comentario: resultado.comentario,
+          );
+
+      setState(() {
+        _estadoActual = resultado.estadoNuevo;
+        _updatedAtActual = DateTime.now();
+      });
+
+      ref.invalidate(historialEstadosProvider(reporte.id));
+      ref.invalidate(todosReportesProvider);
+      ref.invalidate(reporteDetallePorIdProvider(reporte.id));
+      ref.invalidate(misReportesAsignadosProvider);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Seguimiento actualizado correctamente.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo actualizar el seguimiento: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _actualizandoEstado = false);
+      }
+    }
   }
 
   Future<void> _confirmarEliminacion() async {
@@ -214,9 +282,7 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
 
     if (confirmar == true && mounted) {
       try {
-        await ref
-            .read(reportesRepositoryProvider)
-            .eliminarReporte(reporte.id);
+        await ref.read(reportesRepositoryProvider).eliminarReporte(reporte.id);
         ref.invalidate(reportesProvider);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -268,6 +334,8 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final perfilAsync = ref.watch(perfilUsuarioProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Detalle del Reporte'),
@@ -295,11 +363,16 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
                 child: const Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.image_not_supported,
-                        size: 48, color: Colors.grey),
+                    Icon(
+                      Icons.image_not_supported,
+                      size: 48,
+                      color: Colors.grey,
+                    ),
                     SizedBox(height: 8),
-                    Text('Sin evidencia fotográfica',
-                        style: TextStyle(color: Colors.grey)),
+                    Text(
+                      'Sin evidencia fotográfica',
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
@@ -314,7 +387,9 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
@@ -331,18 +406,23 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: _colorEstado(_estadoActual)
-                              .withValues(alpha: 0.12),
+                          color: _colorEstado(
+                            _estadoActual,
+                          ).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(_iconEstado(_estadoActual),
-                                size: 14,
-                                color: _colorEstado(_estadoActual)),
+                            Icon(
+                              _iconEstado(_estadoActual),
+                              size: 14,
+                              color: _colorEstado(_estadoActual),
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               _estadoActual.value,
@@ -442,91 +522,188 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Botones de acción: Apoyar + Comentar
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: _toggleVoto,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                  perfilAsync.when(
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
+                    data: (perfil) {
+                      if (!_puedeGestionarOperativamente(perfil)) {
+                        return const SizedBox.shrink();
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: _votado
-                                  ? AppColors.primary.withValues(alpha: 0.1)
-                                  : Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(12),
+                              color: AppColors.primary.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: _votado
-                                    ? AppColors.primary
-                                    : Colors.grey.shade300,
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.14,
+                                ),
                               ),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(
-                                  _votado
-                                      ? Icons.thumb_up_alt
-                                      : Icons.thumb_up_off_alt,
-                                  color: _votado
-                                      ? AppColors.primary
-                                      : AppColors.textSecondary,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Apoyar ($_conteoVotos)',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: _votado
-                                        ? AppColors.primary
-                                        : AppColors.textPrimary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () =>
-                              mostrarComentarios(context, reporte.id),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: Colors.grey.shade300),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.comment_outlined,
-                                    color: AppColors.textSecondary,
-                                    size: 20),
-                                const SizedBox(width: 8),
                                 const Text(
-                                  'Comentar',
+                                  'Seguimiento operativo',
                                   style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
                                     color: AppColors.textPrimary,
                                   ),
                                 ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Actualiza el avance del reporte y agrega una nota breve para dejar trazabilidad del trabajo realizado.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    height: 1.35,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                ElevatedButton.icon(
+                                  onPressed: _actualizandoEstado
+                                      ? null
+                                      : () => _cambiarEstadoOperativo(perfil!),
+                                  icon: _actualizandoEstado
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Icon(Icons.sync_alt),
+                                  label: Text(
+                                    _actualizandoEstado
+                                        ? 'Actualizando seguimiento...'
+                                        : 'Actualizar seguimiento',
+                                  ),
+                                ),
                               ],
                             ),
                           ),
-                        ),
-                      ),
-                    ],
+                          const SizedBox(height: 20),
+                        ],
+                      );
+                    },
                   ),
-                  const SizedBox(height: 20),
+
+                  // Botones de acción: Apoyar + Comentar
+                  perfilAsync.when(
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
+                    data: (perfil) {
+                      if (perfil?.esTecnico ?? false) {
+                        return const SizedBox.shrink();
+                      }
+
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: _toggleVoto,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _votado
+                                          ? AppColors.primary.withValues(
+                                              alpha: 0.1,
+                                            )
+                                          : Colors.grey.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: _votado
+                                            ? AppColors.primary
+                                            : Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          _votado
+                                              ? Icons.thumb_up_alt
+                                              : Icons.thumb_up_off_alt,
+                                          color: _votado
+                                              ? AppColors.primary
+                                              : AppColors.textSecondary,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Apoyar ($_conteoVotos)',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: _votado
+                                                ? AppColors.primary
+                                                : AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () =>
+                                      mostrarComentarios(context, reporte.id),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.comment_outlined,
+                                          color: AppColors.textSecondary,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'Comentar',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                      );
+                    },
+                  ),
 
                   // Mini mapa
                   if (reporte.ubicacion.latitude != 0.0)
@@ -588,8 +765,18 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
 
   String _formatearFecha(DateTime dt) {
     const meses = [
-      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+      'enero',
+      'febrero',
+      'marzo',
+      'abril',
+      'mayo',
+      'junio',
+      'julio',
+      'agosto',
+      'septiembre',
+      'octubre',
+      'noviembre',
+      'diciembre',
     ];
     return '${dt.day} de ${meses[dt.month - 1]} de ${dt.year}';
   }
@@ -604,6 +791,123 @@ class _ReporteDetalleScreenState extends ConsumerState<ReporteDetalleScreen> {
       return '${duracion.inHours}h ${minutos}m';
     }
     return '${duracion.inMinutes}m';
+  }
+}
+
+class _CambioEstadoResultado {
+  const _CambioEstadoResultado({
+    required this.estadoNuevo,
+    required this.comentario,
+  });
+
+  final EstadoReporte estadoNuevo;
+  final String comentario;
+}
+
+class _CambiarEstadoDialog extends StatefulWidget {
+  const _CambiarEstadoDialog({required this.estadoActual});
+
+  final EstadoReporte estadoActual;
+
+  @override
+  State<_CambiarEstadoDialog> createState() => _CambiarEstadoDialogState();
+}
+
+class _CambiarEstadoDialogState extends State<_CambiarEstadoDialog> {
+  late EstadoReporte _estadoSeleccionado;
+  late final TextEditingController _comentarioController;
+
+  @override
+  void initState() {
+    super.initState();
+    _estadoSeleccionado = EstadoReporte.values.firstWhere(
+      (estado) => estado != widget.estadoActual,
+      orElse: () => widget.estadoActual,
+    );
+    _comentarioController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _comentarioController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Actualizar seguimiento'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Selecciona el nuevo estado del reporte y agrega una nota si quieres dejar contexto del avance.',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<EstadoReporte>(
+              initialValue: _estadoSeleccionado,
+              decoration: const InputDecoration(
+                labelText: 'Nuevo estado',
+                prefixIcon: Icon(Icons.flag_outlined),
+              ),
+              items: EstadoReporte.values
+                  .where((estado) => estado != widget.estadoActual)
+                  .map(
+                    (estado) => DropdownMenuItem(
+                      value: estado,
+                      child: Text(estado.value),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (valor) {
+                if (valor != null) {
+                  setState(() => _estadoSeleccionado = valor);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _comentarioController,
+              decoration: const InputDecoration(
+                labelText: 'Comentario operativo (opcional)',
+                alignLabelWithHint: true,
+                prefixIcon: Icon(Icons.edit_note_outlined),
+                hintText:
+                    'Ej: Se localizó la fuga y el equipo ya trabaja en la reparación.',
+              ),
+              minLines: 3,
+              maxLines: 4,
+              textCapitalization: TextCapitalization.sentences,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(
+              context,
+              _CambioEstadoResultado(
+                estadoNuevo: _estadoSeleccionado,
+                comentario: _comentarioController.text.trim(),
+              ),
+            );
+          },
+          child: const Text('Guardar seguimiento'),
+        ),
+      ],
+    );
   }
 }
 
@@ -699,10 +1003,7 @@ class _FotoCarruselState extends State<_FotoCarrusel> {
         child: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: InteractiveViewer(
-            child: CachedNetworkImage(
-              imageUrl: url,
-              fit: BoxFit.contain,
-            ),
+            child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
           ),
         ),
       ),

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import '../core/constants.dart';
+import '../models/perfil_usuario.dart';
 import '../providers/providers.dart';
 import '../services/cache_service.dart';
 import '../services/local_database_service.dart';
@@ -124,6 +125,20 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
   Future<void> _enviarReporte() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final perfil = await ref.read(perfilUsuarioProvider.future);
+    if (perfil?.esTecnico ?? false) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Tu cuenta de trabajo no puede crear reportes ciudadanos desde esta pantalla.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     setState(() => _enviando = true);
 
     try {
@@ -142,8 +157,8 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
         final perfil = await ref.read(authRepositoryProvider).obtenerPerfil();
         final coloniaGeocodificada = widget.coloniaSeleccionada?.trim() ?? '';
         final colonia = coloniaGeocodificada.isNotEmpty
-          ? coloniaGeocodificada
-          : (perfil?.colonia ?? 'Sin colonia');
+            ? coloniaGeocodificada
+            : (perfil?.colonia ?? 'Sin colonia');
 
         await reportesRepo.crearReporte(
           titulo: _tituloController.text.trim(),
@@ -227,242 +242,306 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final perfilAsync = ref.watch(perfilUsuarioProvider);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Nuevo Reporte')),
       body: SafeArea(
-        child: _enviando
-            ? const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 20),
-                    Text(
-                      'Subiendo fotos y creando reporte...',
-                      style: TextStyle(
-                        fontSize: 16,
+        child: perfilAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, _) => _construirFormulario(),
+          data: (perfil) {
+            if (perfil?.esTecnico ?? false) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.lock_outline,
+                        size: 64,
                         color: AppColors.textSecondary,
                       ),
-                    ),
-                  ],
-                ),
-              )
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Categoría
-                      DropdownButtonFormField<CategoriaReporte>(
-                        initialValue: _categoriaSeleccionada,
-                        decoration: const InputDecoration(
-                          labelText: 'Categoría del problema',
-                          prefixIcon: Icon(Icons.category),
-                        ),
-                        items: CategoriaReporte.values.map((cat) {
-                          return DropdownMenuItem(
-                            value: cat,
-                            child: Text(cat.value),
-                          );
-                        }).toList(),
-                        onChanged: (v) {
-                          if (v != null) {
-                            setState(() => _categoriaSeleccionada = v);
-                          }
-                        },
-                      ),
                       const SizedBox(height: 16),
-
-                      // Título
-                      TextFormField(
-                        controller: _tituloController,
-                        decoration: const InputDecoration(
-                          labelText: 'Título del reporte',
-                          prefixIcon: Icon(Icons.title),
-                          hintText: 'Ej: Fuga en la calle principal',
+                      const Text(
+                        'Esta opción no está disponible para tu cuenta de trabajo',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
                         ),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
+                        textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 16),
-
-                      // Descripción
-                      TextFormField(
-                        controller: _descripcionController,
-                        decoration: const InputDecoration(
-                          labelText: 'Descripción',
-                          prefixIcon: Icon(Icons.description),
-                          hintText: 'Describe el problema con detalle...',
-                          alignLabelWithHint: true,
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Tus reportes asignados se gestionan desde el módulo operativo y no desde el formulario ciudadano.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          height: 1.4,
                         ),
-                        maxLines: 4,
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Switch de privacidad
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _esPrivado ? Icons.lock : Icons.public,
-                              color: _esPrivado
-                                  ? AppColors.primary
-                                  : AppColors.textSecondary,
-                              size: 22,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Reporte Privado',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  Text(
-                                    _esPrivado
-                                        ? 'Solo visible para el equipo administrador'
-                                        : 'Visible en el Feed Comunitario',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: _esPrivado,
-                              onChanged: (v) =>
-                                  setState(() => _esPrivado = v),
-                              activeTrackColor: AppColors.primary,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Coordenadas (solo lectura)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.gps_fixed,
-                                color: AppColors.primary, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Lat: ${widget.ubicacion.latitude.toStringAsFixed(6)}, '
-                                'Lon: ${widget.ubicacion.longitude.toStringAsFixed(6)}',
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-
-                      // Direccion legible (reverse geocoding)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.location_on,
-                              color: AppColors.primary,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                widget.direccionLegible ??
-                                    'Direccion no disponible sin conexion (Ubicacion GPS guardada)',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.textPrimary,
-                                  height: 1.3,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                        textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 20),
-
-                      // Sección de fotos
-                      Row(
-                        children: [
-                          const Icon(Icons.photo_camera_outlined,
-                              size: 20, color: AppColors.textSecondary),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Evidencia fotográfica (${_fotos.length}/$_maxFotos)',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Grid de miniaturas + botón agregar
-                      SizedBox(
-                        height: 110,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: [
-                            ..._fotos.asMap().entries.map((entry) {
-                              return _FotoMiniatura(
-                                foto: entry.value,
-                                onRemove: () {
-                                  setState(() => _fotos.removeAt(entry.key));
-                                },
-                              );
-                            }),
-                            if (_fotos.length < _maxFotos)
-                              _BotonAgregarFoto(onTap: _mostrarOpcionesFoto),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Botón enviar
-                      ElevatedButton.icon(
-                        onPressed: _enviarReporte,
-                        icon: const Icon(Icons.send),
-                        label: const Text('Enviar Reporte'),
+                      OutlinedButton.icon(
+                        onPressed: () => context.go('/'),
+                        icon: const Icon(Icons.arrow_back),
+                        label: const Text('Volver al inicio'),
                       ),
                     ],
                   ),
                 ),
-              ),
+              );
+            }
+
+            return _construirFormulario();
+          },
+        ),
       ),
     );
+  }
+
+  Widget _construirFormulario() {
+    return _enviando
+        ? const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 20),
+                Text(
+                  'Subiendo fotos y creando reporte...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          )
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Categoría
+                  DropdownButtonFormField<CategoriaReporte>(
+                    initialValue: _categoriaSeleccionada,
+                    decoration: const InputDecoration(
+                      labelText: 'Categoría del problema',
+                      prefixIcon: Icon(Icons.category),
+                    ),
+                    items: CategoriaReporte.values.map((cat) {
+                      return DropdownMenuItem(
+                        value: cat,
+                        child: Text(cat.value),
+                      );
+                    }).toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() => _categoriaSeleccionada = v);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Título
+                  TextFormField(
+                    controller: _tituloController,
+                    decoration: const InputDecoration(
+                      labelText: 'Título del reporte',
+                      prefixIcon: Icon(Icons.title),
+                      hintText: 'Ej: Fuga en la calle principal',
+                    ),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Campo requerido'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Descripción
+                  TextFormField(
+                    controller: _descripcionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Descripción',
+                      prefixIcon: Icon(Icons.description),
+                      hintText: 'Describe el problema con detalle...',
+                      alignLabelWithHint: true,
+                    ),
+                    maxLines: 4,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Campo requerido'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Switch de privacidad
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _esPrivado ? Icons.lock : Icons.public,
+                          color: _esPrivado
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Reporte Privado',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                _esPrivado
+                                    ? 'Solo visible para el equipo administrador'
+                                    : 'Visible en el Feed Comunitario',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: _esPrivado,
+                          onChanged: (v) => setState(() => _esPrivado = v),
+                          activeTrackColor: AppColors.primary,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Coordenadas (solo lectura)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.gps_fixed,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Lat: ${widget.ubicacion.latitude.toStringAsFixed(6)}, '
+                            'Lon: ${widget.ubicacion.longitude.toStringAsFixed(6)}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Direccion legible (reverse geocoding)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.location_on,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            widget.direccionLegible ??
+                                'Direccion no disponible sin conexion (Ubicacion GPS guardada)',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textPrimary,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Sección de fotos
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.photo_camera_outlined,
+                        size: 20,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Evidencia fotográfica (${_fotos.length}/$_maxFotos)',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Grid de miniaturas + botón agregar
+                  SizedBox(
+                    height: 110,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        ..._fotos.asMap().entries.map((entry) {
+                          return _FotoMiniatura(
+                            foto: entry.value,
+                            onRemove: () {
+                              setState(() => _fotos.removeAt(entry.key));
+                            },
+                          );
+                        }),
+                        if (_fotos.length < _maxFotos)
+                          _BotonAgregarFoto(onTap: _mostrarOpcionesFoto),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Botón enviar
+                  ElevatedButton.icon(
+                    onPressed: _enviarReporte,
+                    icon: const Icon(Icons.send),
+                    label: const Text('Enviar Reporte'),
+                  ),
+                ],
+              ),
+            ),
+          );
   }
 }
 
@@ -480,12 +559,7 @@ class _FotoMiniatura extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.file(
-              foto,
-              width: 100,
-              height: 100,
-              fit: BoxFit.cover,
-            ),
+            child: Image.file(foto, width: 100, height: 100, fit: BoxFit.cover),
           ),
           Positioned(
             top: 4,

@@ -33,7 +33,10 @@ class PushNotificationService {
   Future<void> init({
     Future<void> Function(Map<String, dynamic> data)? onNotificationTap,
   }) async {
-    if (_initialized) return;
+    if (_initialized) {
+      await sincronizarTokenActual();
+      return;
+    }
     _initialized = true;
 
     try {
@@ -47,10 +50,26 @@ class PushNotificationService {
       );
       debugPrint('[Push] Permisos: ${settings.authorizationStatus.name}');
 
-      await _registrarTokenActual();
+      await sincronizarTokenActual();
 
       _messaging.onTokenRefresh.listen((token) async {
         await _guardarTokenEnSupabase(token);
+      });
+
+      _client.auth.onAuthStateChange.listen((event) async {
+        switch (event.event) {
+          case AuthChangeEvent.initialSession:
+          case AuthChangeEvent.signedIn:
+          case AuthChangeEvent.tokenRefreshed:
+          case AuthChangeEvent.userUpdated:
+          case AuthChangeEvent.passwordRecovery:
+            await sincronizarTokenActual();
+            break;
+          case AuthChangeEvent.signedOut:
+          case AuthChangeEvent.userDeleted:
+          case AuthChangeEvent.mfaChallengeVerified:
+            break;
+        }
       });
 
       FirebaseMessaging.onMessage.listen((message) {
@@ -139,7 +158,7 @@ class PushNotificationService {
     );
   }
 
-  Future<void> _registrarTokenActual() async {
+  Future<void> sincronizarTokenActual() async {
     try {
       final token = await _messaging.getToken();
       if (token == null || token.isEmpty) return;
@@ -154,6 +173,12 @@ class PushNotificationService {
     if (userId == null) return;
 
     try {
+      await _client
+          .from('device_tokens')
+          .delete()
+          .eq('token', token)
+          .neq('usuario_id', userId);
+
       await _client.from('device_tokens').upsert(
         {
           'usuario_id': userId,
